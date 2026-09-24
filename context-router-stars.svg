@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+<title id="title">A small context router under a starry sky</title>
+<desc id="desc">An AGENTS.md kernel sends a task to a friendly little router, which loads only the matching topic page. 119 quiet stars fill the night sky.</desc>
+<defs>
+  <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#19243d"/><stop offset="1" stop-color="#283755"/></linearGradient>
+  <linearGradient id="card" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fffdf8"/><stop offset="1" stop-color="#f2f0e9"/></linearGradient>
+  <filter id="glow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="7" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<rect width="1200" height="360" rx="26" fill="url(#sky)"/>
+<g aria-hidden="true">
+<circle cx="804" cy="192" r="1.5" fill="#ffffff" opacity="0.45"/>
+<circle cx="604" cy="305" r="1.8" fill="#f6d98b" opacity="0.7"/>
+<circle cx="43" cy="149" r="1.2" fill="#dce5ff" opacity="0.7"/>
+<circle cx="330" cy="185" r="1.5" fill="#f6d98b" opacity="0.55"/>
+<circle cx="145" cy="83" r="2.5" fill="#ffffff" opacity="0.35"/>
+<circle cx="601" cy="132" r="1.2" fill="#f6d98b" opacity="0.55"/>
+<circle cx="997" cy="86" r="2.5" fill="#dce5ff" opacity="0.35"/>
+<circle cx="226" cy="95" r="1.5" fill="#ffffff" opacity="0.35"/>
+<circle cx="674" cy="137" r="2.5" fill="#f6d98b" opacity="0.35"/>
+<circle cx="396" cy="244" r="1.2" fill="#ffffff" opacity="0.55"/>
+<circle cx="322" cy="76" r="1.2" fill="#dce5ff" opacity="0.7"/>
+<circle cx="1034" cy="224" r="1.5" fill="#dce5ff" opacity="0.35"/>
+<circle cx="300" cy="61" r="2.1" fill="#ffffff" opacity="0.7"/>
+<circle cx="1114" cy="165" r="2.5" fill="#dce5ff" opacity="0.35"/>
+<circle cx="973" cy="186" r="1.5" fill="#dce5ff" opacity="0.45"/>
+<circle cx="105" cy="77" r="1.5" fill="#f6d98b" opacity="0.7"/>
+<circle cx="198" cy="333" r="2.5" fill="#f6d98b" opacity="0.7"/>
+<circle cx="227" cy="145" r="1.5" fill="#ffffff" opacity="0.7"/>
+<circle cx="965" cy="232" r="2.1" fill="#f6d98b" opacity="0.35"/>
+<circle cx="589" cy="299" r="1.5" fill="#ffffff" opacity="0.45"/>
+<circle cx="796" cy="188" r="2.5" fill="#ffffff" opacity="0.7"/>
+<circle cx="927" cy="63" r="1.5" fill="#dce5ff" opacity="0.85"/>
+<circle cx="461" cy="37" r="1.5" fill="#ffffff" opacity="0.45"/>
+<circle cx="517" cy="54" r="1.5" fill="#f6d98b" opacity="0.85"/>
+<circle cx="341" cy="274" r="1.8" fill="#dce5ff" opacity="0.35"/>
+<circle cx="810" cy="82" r="2.1" fill="#f6d98b" opacity="0.85"/>
+<circle cx="419" cy="304" r="2.1" fill="#ffffff" opacity="0.7"/>
+<circle cx="578" cy="203" r="1.2" fill="#f6d98b" opacity="0.45"/>
+<circle cx="339" cy="100" r="2.5" fill="#f6d98b" opacity="0.85"/>
+<circle cx="386" cy="232" r="1.2" fill="#f6d98b" opacity="0.35"/>
+<circle cx="744" cy="131" r="2.1" fill="#ffffff" opacity="0.55"/>
+<circle cx="334" cy="154" r="2.1" fill="#dce5ff" opacity="0.85"/>
+<circle cx="275" cy="165" r="2.5" fill="#ffffff" opacity="0.85"/>
+<circle cx="645" cy="228" r="2.1" fill="#dce5ff" opacity="0.45"/>
+<circle cx="1048" cy="262" r="2.5" fill="#dce5ff" opacity="0.7"/>
+<circle cx="1014" cy="115" r="2.1" fill="#dce5ff" opacity="0.55"/>
+<circle cx="529" cy="275" r="2.1" fill="#ffffff" opacity="0.85"/>
+<circle cx="135" cy="334" r="2.5" fill="#f6d98b" opacity="0.35"/>
+<circle cx="424" cy="233" r="2.1" fill="#ffffff" opacity="0.55"/>
+<circle cx="376" cy="240" r="1.2" fill="#dce5ff" opacity="0.45"/>
+<circle cx="1076" cy="227" r="1.5" fill="#f6d98b" opacity="0.35"/>
+<circle cx="1111" cy="214" r="1.2" fill="#ffffff" opacity="0.45"/>
+<circle cx="72" cy="307" r="2.5" fill="#ffffff" opacity="0.45"/>
+<circle cx="405" cy="44" r="2.5" fill="#f6d98b" opacity="0.55"/>
+<circle cx="1069" cy="116" r="2.1" fill="#f6d98b" opacity="0.35"/>
+<circle cx="1125" cy="42" r="1.5" fill="#dce5ff" opacity="0.55"/>
+<circle cx="590" cy="270" r="1.2" fill="#dce5ff" opacity="0.7"/>
+<circle cx="659" cy="76" r="1.8" fill="#dce5ff" opacity="0.7"/>
+<circle cx="1139" cy="185" r="2.1" fill="#f6d98b" opacity="0.55"/>
+<circle cx="390" cy="65" r="1.2" fill="#ffffff" opacity="0.55"/>
+<circle cx="742" cy="104" r="2.1" fill="#ffffff" opacity="0.45"/>
+<circle cx="349" cy="67" r="1.2" fill="#ffffff" opacity="0.35"/>
+<circle cx="655" cy="182" r="1.8" fill="#dce5ff" opacity="0.35"/>
+<circle cx="131" cy="238" r="1.2" fill="#dce5ff" opacity="0.35"/>
+<circle cx="588" cy="291" r="1.8" fill="#dce5ff" opacity="0.55"/>
+<circle cx="991" cy="293" r="2.1" fill="#f6d98b" opacity="0.7"/>
+<circle cx="541" cy="337" r="2.5" fill="#f6d98b" opacity="0.55"/>
+<circle cx="354" cy="147" r="1.2" fill="#f6d98b" opacity="0.55"/>
+<circle cx="132" cy="120" r="1.8" fill="#ffffff" opacity="0.55"/>
+<circle cx="537" cy="171" r="1.8" fill="#dce5ff" opacity="0.55"/>
+<circle cx="161" cy="157" r="2.5" fill="#dce5ff" opacity="0.55"/>
+<circle cx="853" cy="300" r="2.5" fill="#ffffff" opacity="0.35"/>
+<circle cx="502" cy="213" r="2.1" fill="#f6d98b" opacity="0.85"/>
+<circle cx="945" cy="236" r="1.5" fill="#dce5ff" opacity="0.35"/>
+<circle cx="149" cy="173" r="2.5" fill="#dce5ff" opacity="0.55"/>
+<circle cx="378" cy="275" r="2.1" fill="#f6d98b" opacity="0.35"/>
+<circle cx="1173" cy="263" r="2.5" fill="#f6d98b" opacity="0.35"/>
+<circle cx="269" cy="229" r="2.1" fill="#f6d98b" opacity="0.35"/>
+<circle cx="211" cy="30" r="1.2" fill="#ffffff" opacity="0.85"/>
+<circle cx="949" cy="242" r="2.1" fill="#dce5ff" opacity="0.55"/>
+<circle cx="337" cy="338" r="2.5" fill="#f6d98b" opacity="0.35"/>
+<circle cx="853" cy="219" r="1.8" fill="#dce5ff" opacity="0.7"/>
+<circle cx="782" cy="322" r="1.2" fill="#f6d98b" opacity="0.85"/>
+<circle cx="1070" cy="103" r="1.8" fill="#dce5ff" opacity="0.45"/>
+<circle cx="576" cy="160" r="2.1" fill="#f6d98b" opacity="0.7"/>
+<circle cx="204" cy="147" r="2.5" fill="#dce5ff" opacity="0.45"/>
+<circle cx="77" cy="63" r="1.2" fill="#ffffff" opacity="0.55"/>
+<circle cx="528" cy="111" r="1.5" fill="#dce5ff" opacity="0.55"/>
+<circle cx="374" cy="201" r="2.5" fill="#ffffff" opacity="0.35"/>
+<circle cx="190" cy="63" r="1.2" fill="#f6d98b" opacity="0.85"/>
+<circle cx="252" cy="202" r="1.5" fill="#dce5ff" opacity="0.35"/>
+
+<circle cx="636" cy="64" r="1.5" fill="#dce5ff" opacity="0.35"/>
+<circle cx="961" cy="145" r="2.5" fill="#ffffff" opacity="0.45"/>
+<circle cx="1002" cy="133" r="1.8" fill="#ffffff" opacity="0.35"/>
+<circle cx="1067" cy="234" r="2.1" fill="#ffffff" opacity="0.55"/>
+<circle cx="1006" cy="199" r="2.1" fill="#ffffff" opacity="0.85"/>
+<circle cx="327" cy="70" r="1.2" fill="#dce5ff" opacity="0.7"/>
+<circle cx="617" cy="243" r="2.1" fill="#dce5ff" opacity="0.7"/>
+<circle cx="1012" cy="185" r="1.5" fill="#ffffff" opacity="0.35"/>
+<circle cx="192" cy="79" r="2.5" fill="#ffffff" opacity="0.55"/>
+<circle cx="557" cy="144" r="1.8" fill="#dce5ff" opacity="0.45"/>
+<circle cx="1079" cy="291" r="2.1" fill="#ffffff" opacity="0.85"/>
+<circle cx="165" cy="326" r="2.5" fill="#dce5ff" opacity="0.7"/>
+<circle cx="226" cy="335" r="2.1" fill="#ffffff" opacity="0.45"/>
+<circle cx="291" cy="303" r="1.2" fill="#ffffff" opacity="0.35"/>
+<circle cx="529" cy="121" r="2.1" fill="#ffffff" opacity="0.55"/>
+<circle cx="506" cy="234" r="2.1" fill="#ffffff" opacity="0.55"/>
+<circle cx="836" cy="39" r="2.1" fill="#dce5ff" opacity="0.55"/>
+<circle cx="730" cy="116" r="2.5" fill="#dce5ff" opacity="0.45"/>
+<circle cx="694" cy="316" r="2.1" fill="#ffffff" opacity="0.35"/>
+<circle cx="125" cy="298" r="2.5" fill="#ffffff" opacity="0.7"/>
+<circle cx="595" cy="107" r="2.5" fill="#dce5ff" opacity="0.7"/>
+<circle cx="939" cy="242" r="1.2" fill="#ffffff" opacity="0.45"/>
+<circle cx="1058" cy="32" r="1.2" fill="#dce5ff" opacity="0.45"/>
+<circle cx="654" cy="48" r="1.2" fill="#f6d98b" opacity="0.55"/>
+<circle cx="1090" cy="38" r="2.5" fill="#ffffff" opacity="0.55"/>
+<circle cx="713" cy="150" r="1.8" fill="#dce5ff" opacity="0.55"/>
+<circle cx="167" cy="314" r="1.5" fill="#dce5ff" opacity="0.35"/>
+<circle cx="911" cy="301" r="2.1" fill="#dce5ff" opacity="0.35"/>
+<circle cx="962" cy="87" r="1.2" fill="#f6d98b" opacity="0.85"/>
+<circle cx="1068" cy="102" r="2.1" fill="#dce5ff" opacity="0.7"/>
+<circle cx="1118" cy="75" r="1.2" fill="#ffffff" opacity="0.45"/>
+<circle cx="414" cy="335" r="1.5" fill="#dce5ff" opacity="0.45"/>
+<circle cx="818" cy="91" r="1.5" fill="#dce5ff" opacity="0.35"/>
+<circle cx="387" cy="38" r="2.5" fill="#dce5ff" opacity="0.35"/>
+<circle cx="847" cy="192" r="1.2" fill="#ffffff" opacity="0.85"/>
+<circle cx="555" cy="50" r="1.5" fill="#ffffff" opacity="0.55"/>
+<circle cx="945" cy="85" r="2.1" fill="#ffffff" opacity="0.7"/>
+<circle cx="507" cy="172" r="2.1" fill="#dce5ff" opacity="0.35"/>
+</g>
+<!-- gentle path from the always-loaded kernel through the router to one useful topic -->
+<path d="M385 184 C465 184 475 184 528 184 M665 184 C730 184 744 184 802 184" fill="none" stroke="#9fb4d1" stroke-width="2.5" stroke-dasharray="5 9" stroke-linecap="round" opacity=".8"/>
+<path d="M795 184l-10-6v12z" fill="#9fb4d1"/>
+<!-- kernel card -->
+<g transform="translate(95 116)">
+  <rect width="290" height="136" rx="18" fill="url(#card)"/>
+  <rect x="20" y="20" width="36" height="42" rx="7" fill="#dce8e1"/>
+  <path d="M29 31h18M29 39h18M29 47h12" stroke="#587467" stroke-width="2" stroke-linecap="round"/>
+  <text x="72" y="39" fill="#28334a" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" font-weight="700">AGENTS.md</text>
+  <text x="22" y="91" fill="#596579" font-family="ui-sans-serif, system-ui, sans-serif" font-size="16">A small kernel, always ready</text>
+  <text x="22" y="116" fill="#8290a0" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13">rules every task needs</text>
+</g>
+<!-- little router: rounded star-like character with calm details -->
+<g transform="translate(596 184)" filter="url(#glow)">
+  <path d="M0-57l13 27 30-9-13 28 23 21-31 3-9 30-15-27-30 9 13-28-23-21 31-3z" fill="#f3d98d"/>
+  <path d="M-10-4q4-5 8 0M7-4q4-5 8 0" fill="none" stroke="#5c5260" stroke-width="2.8" stroke-linecap="round"/>
+  <path d="M-3 8q5 5 10 0" fill="none" stroke="#5c5260" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="-22" cy="8" r="3" fill="#e99d91"/><circle cx="22" cy="8" r="3" fill="#e99d91"/>
+</g>
+<text x="596" y="280" text-anchor="middle" fill="#d6dfef" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" letter-spacing="1.4">CONTEXT ROUTER</text>
+<!-- selected topic -->
+<g transform="translate(802 116)">
+  <rect width="302" height="136" rx="18" fill="#e6efe9" stroke="#a9c6b3" stroke-width="2"/>
+  <rect x="20" y="20" width="36" height="42" rx="7" fill="#c6dccd"/>
+  <path d="M29 31h18M29 39h18M29 47h12" stroke="#587467" stroke-width="2" stroke-linecap="round"/>
+  <text x="72" y="39" fill="#28334a" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" font-weight="700">wiki/deploy.md</text>
+  <text x="22" y="91" fill="#596579" font-family="ui-sans-serif, system-ui, sans-serif" font-size="16">Only what this task needs</text>
+  <text x="22" y="116" fill="#718477" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13">the right details, right on time</text>
+</g>
+</svg>
