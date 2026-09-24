@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 390" role="img" aria-labelledby="title desc">
+<title id="title">From an overloaded instruction file to a tidy kernel</title>
+<desc id="desc">Three comic panels show an agent overwhelmed by a huge AGENTS.md, searching for one buried rule, then calmly using a short kernel and organized topic pages.</desc>
+<defs>
+  <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#19243d"/><stop offset="1" stop-color="#283755"/></linearGradient>
+  <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fffdf8"/><stop offset="1" stop-color="#f1eee5"/></linearGradient>
+</defs>
+<rect width="1200" height="390" rx="26" fill="url(#sky)"/>
+<g fill="#dce5ff" opacity=".55"><circle cx="38" cy="25" r="2"/><circle cx="390" cy="340" r="2"/><circle cx="810" cy="22" r="2"/><circle cx="1165" cy="345" r="2"/></g>
+<!-- panel frames -->
+<g fill="url(#paper)" stroke="#d8dfed" stroke-width="2">
+  <rect x="22" y="22" width="370" height="346" rx="20"/>
+  <rect x="415" y="22" width="370" height="346" rx="20"/>
+  <rect x="808" y="22" width="370" height="346" rx="20"/>
+</g>
+<g font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="700" text-anchor="middle">
+  <circle cx="58" cy="51" r="15" fill="#f3d98d"/><text x="58" y="56" fill="#53667d">1</text>
+  <circle cx="451" cy="51" r="15" fill="#f3d98d"/><text x="451" y="56" fill="#53667d">2</text>
+  <circle cx="844" cy="51" r="15" fill="#f3d98d"/><text x="844" y="56" fill="#53667d">3</text>
+</g>
+<!-- panel 1: a long file stack -->
+<g transform="translate(52 91)">
+  <rect x="6" y="42" width="202" height="198" rx="12" fill="#d5dbea"/>
+  <rect x="0" y="28" width="202" height="198" rx="12" fill="#e3e8ef" stroke="#b5c1d1" stroke-width="2"/>
+  <rect x="12" y="14" width="202" height="198" rx="12" fill="url(#paper)" stroke="#aab7ca" stroke-width="2"/>
+  <path d="M30 47h118M30 67h160M30 87h140M30 107h155M30 127h126M30 147h157M30 167h135" stroke="#aab6c8" stroke-width="5" stroke-linecap="round"/>
+  <rect x="12" y="14" width="202" height="35" rx="11" fill="#dce8e1"/>
+  <text x="27" y="38" fill="#34475c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700">AGENTS.md</text>
+  <path d="M214 15l19-17 12 15 17-12 14 18" fill="none" stroke="#d79f79" stroke-width="5" stroke-linecap="round"/>
+</g>
+<!-- overwhelmed little agent -->
+<g transform="translate(305 268)">
+  <path d="M0-35l8 15 18-5-8 16 14 12-19 2-5 18-9-16-18 5 8-16-14-12 19-2z" fill="#f3d98d"/>
+  <path d="M-11-3l5 5m18-5L7 2M-2 11q5-5 10 0" fill="none" stroke="#5c5260" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M-26-36l-8-11m44 7 8-12" stroke="#8fa0ba" stroke-width="3" stroke-linecap="round"/>
+</g>
+<!-- panel 2: a magnifier finds one hidden warning -->
+<g transform="translate(449 89)">
+  <rect x="20" y="92" width="190" height="154" rx="12" fill="#e3e8ef" stroke="#b5c1d1" stroke-width="2"/>
+  <rect x="5" y="68" width="204" height="166" rx="12" fill="url(#paper)" stroke="#aab7ca" stroke-width="2"/>
+  <rect x="5" y="68" width="204" height="34" rx="11" fill="#e8e5f0"/>
+  <text x="19" y="91" fill="#4a526c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">history/incident.md</text>
+  <path d="M23 124h153M23 145h167M23 166h140M23 187h156" stroke="#b4bfce" stroke-width="5" stroke-linecap="round"/>
+  <path d="M95 187h47" stroke="#d69c73" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="169" cy="190" r="51" fill="#fffdf8" fill-opacity=".9" stroke="#6f8c9b" stroke-width="8"/>
+  <path d="M205 226l37 36" stroke="#6f8c9b" stroke-width="12" stroke-linecap="round"/>
+  <path d="M169 164l22 43h-44z" fill="#f3d98d" stroke="#d6a95b" stroke-width="2"/>
+  <path d="M169 177v13m0 8v1" stroke="#675b4c" stroke-width="3" stroke-linecap="round"/>
+</g>
+<g transform="translate(731 284)">
+  <path d="M0-27l7 12 15-4-7 13 12 10-16 2-4 15-8-13-14 4 6-13-11-10 15-2z" fill="#f3d98d"/>
+  <path d="M-8-2q3-4 6 0m7 0q3-4 6 0m-10 9q4 4 8 0" fill="none" stroke="#5c5260" stroke-width="2" stroke-linecap="round"/>
+</g>
+<!-- panel 3: short kernel and separate topic cards -->
+<g transform="translate(839 111)">
+  <rect x="0" y="18" width="135" height="184" rx="14" fill="#dce8e1" stroke="#a9c6b3" stroke-width="2"/>
+  <text x="14" y="48" fill="#34475c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="700">AGENTS.md</text>
+  <path d="M16 72h101M16 91h88M16 110h98M16 129h75" stroke="#8aa293" stroke-width="5" stroke-linecap="round"/>
+  <path d="M150 58h12m-6-6 6 6-6 6" fill="none" stroke="#8296b0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <g transform="translate(183 34)"><rect width="125" height="55" rx="10" fill="#fffdf8" stroke="#c8cfdd" stroke-width="2"/><path d="M14 20h93M14 34h72" stroke="#aab6c8" stroke-width="4" stroke-linecap="round"/></g>
+  <g transform="translate(183 101)"><rect width="125" height="55" rx="10" fill="#e6efe9" stroke="#a9c6b3" stroke-width="2"/><path d="M14 20h93M14 34h72" stroke="#8aa293" stroke-width="4" stroke-linecap="round"/></g>
+  <g transform="translate(183 168)"><rect width="125" height="30" rx="10" fill="#fffdf8" stroke="#c8cfdd" stroke-width="2"/><path d="M14 15h70" stroke="#aab6c8" stroke-width="4" stroke-linecap="round"/></g>
+</g>
+<g transform="translate(1130 298)">
+  <path d="M0-27l7 12 15-4-7 13 12 10-16 2-4 15-8-13-14 4 6-13-11-10 15-2z" fill="#f3d98d"/>
+  <path d="M-8-1q3-4 6 0m7 0q3-4 6 0m-10 7q4 4 8 0" fill="none" stroke="#5c5260" stroke-width="2" stroke-linecap="round"/>
+</g>
+</svg>

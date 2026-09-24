@@ -1,0 +1,20 @@
+{
+  "name": "agents-context-router",
+  "interface": {
+    "displayName": "Agents Context Router"
+  },
+  "plugins": [
+    {
+      "name": "agents-context-router",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

@@ -8,6 +8,10 @@
 
 더 나쁜 건 정작 중요한 규칙이 묻혀 버린다는 점입니다. 14 KB짜리 `AGENTS.md`를 떠올려 보세요. *"shared 환경에서 절대 `make reset-db`를 실행하지 말 것"*이라는 유일한 언급이 2026-03 인수 테스트 로그 안에 들어 있고, 어떤 agent도 그 로그를 꼼꼼히 읽지 않습니다.
 
+<p align="center">
+  <img src="context-router-comic-overload.svg" alt="너무 커진 AGENTS.md에서 묻힌 규칙을 찾고, 짧은 kernel과 정리된 topic으로 나누는 과정을 그린 3컷 만화" width="100%">
+</p>
+
 ```
 Before                                  After
 ────────────────────────────────────    ─────────────────────────────────────────────
@@ -35,6 +39,10 @@ flowchart LR
 ```
 
 kernel이 작기 때문에 agent는 그것을 꼼꼼히 읽습니다. 각 topic은 작업에 필요할 때만 로드되고, history는 누군가 요청하기 전까지 방해가 되지 않습니다.
+
+<p align="center">
+  <img src="context-router-comic-routing.svg" alt="작업이 kernel을 거쳐 필요한 wiki topic 하나만 선택하고, 관련 없는 페이지는 닫아 둔 채 진행하는 3컷 만화" width="100%">
+</p>
 
 ## 사용자 스토리
 
@@ -138,7 +146,36 @@ skill을 쓰면 실행당 약 25초와 6k token이 더 듭니다. 표본은 작�
 
 ## 빠른 시작
 
-### [skillshare](https://github.com/runkids/skillshare) 사용
+### plugin으로 설치
+
+#### Claude Code
+
+```text
+/plugin marketplace add runkids/agents-context-router
+/plugin install agents-context-router@agents-context-router
+```
+
+#### Codex
+
+```bash
+codex plugin marketplace add runkids/agents-context-router
+codex
+```
+
+Codex에서 `/plugins`를 열고 **agents-context-router**를 찾아 설치하세요. 사용하려면 새 세션을 시작하세요.
+
+#### [Skillshare](https://github.com/runkids/skillshare) 사용
+
+이미 Skillshare를 사용 중이라면 명령 하나로 Claude Code와 Codex에 이 native plugin을 설치하고, 에이전트별 설치 상태와 설정을 관리할 수 있습니다.
+
+```bash
+skillshare plugin add runkids/agents-context-router --plugin agents-context-router --target claude --target codex --global
+skillshare sync plugins
+```
+
+[여러 코딩 에이전트를 지원하는 Skillshare](https://skillshare.runkids.cc/docs/reference/commands/plugin/)로 plugin 관리도 한곳에 모아 보세요.
+
+### [Skillshare](https://github.com/runkids/skillshare)로 skill 설치
 
 ```bash
 # global: every project on this machine

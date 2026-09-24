@@ -8,6 +8,10 @@
 
 更糟的是，真正重要的规则会被淹没。想象一个 14 KB 的 `AGENTS.md`，其中唯一一处提到 *“永远不要在 shared 上运行 `make reset-db`”* 的地方，藏在一份 2026-03 的验收日志里，而没有任何 agent 会认真读它。
 
+<p align="center">
+  <img src="context-router-comic-overload.svg" alt="三格漫画：agent 被臃肿的 AGENTS.md 淹没，寻找藏起来的规则，然后改用精简 kernel 和整理好的 topic" width="100%">
+</p>
+
 ```
 Before                                  After
 ────────────────────────────────────    ─────────────────────────────────────────────
@@ -35,6 +39,10 @@ flowchart LR
 ```
 
 kernel 保持精简，agent 才会认真读它。每个 topic 只在任务需要时加载，历史记录则安静待在一旁，直到有人主动要它。
+
+<p align="center">
+  <img src="context-router-comic-routing.svg" alt="三格漫画展示任务经过 kernel，选中匹配的 wiki topic，并让无关页面保持关闭" width="100%">
+</p>
 
 ## 用户故事
 
@@ -138,7 +146,36 @@ $ python3 scripts/ai-context.py debugging     # prints ONLY what debugging needs
 
 ## 快速开始
 
-### 使用 [skillshare](https://github.com/runkids/skillshare)
+### 作为 plugin 安装
+
+#### Claude Code
+
+```text
+/plugin marketplace add runkids/agents-context-router
+/plugin install agents-context-router@agents-context-router
+```
+
+#### Codex
+
+```bash
+codex plugin marketplace add runkids/agents-context-router
+codex
+```
+
+然后在 Codex 中打开 `/plugins`，找到 **agents-context-router** 并安装。新开一个 session 即可使用。
+
+#### 使用 [Skillshare](https://github.com/runkids/skillshare)
+
+已经在用 Skillshare？一条命令即可将这个原生 plugin 安装到 Claude Code 和 Codex，并查看、管理各 agent 的安装状态：
+
+```bash
+skillshare plugin add runkids/agents-context-router --plugin agents-context-router --target claude --target codex --global
+skillshare sync plugins
+```
+
+[Skillshare 支持多种 coding agent](https://skillshare.runkids.cc/docs/reference/commands/plugin/)，也能把 plugin 管理集中到一处。
+
+### 使用 [Skillshare](https://github.com/runkids/skillshare) 安装 skill
 
 ```bash
 # global: every project on this machine

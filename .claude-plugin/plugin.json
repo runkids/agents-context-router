@@ -1,0 +1,11 @@
+{
+  "name": "agents-context-router",
+  "description": "Route coding agents to only the repository context each task needs.",
+  "author": {
+    "name": "runkids",
+    "url": "https://github.com/runkids"
+  },
+  "homepage": "https://github.com/runkids/agents-context-router",
+  "repository": "https://github.com/runkids/agents-context-router",
+  "license": "MIT"
+}

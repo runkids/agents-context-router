@@ -7,10 +7,14 @@
 Every coding agent (Claude Code, Codex, Cursor, Gemini CLI) reads your root instruction file before it does anything. Six months into a project that file holds milestone logs, tool catalogs, deploy runbooks, a debugging diary and one critical rule buried on line 400. A one-line typo fix pays for all of it in context, in tokens and in attention.
 
 <p align="center">
-  <img src="context-router-stars.svg" alt="A small AGENTS.md kernel routes a task to just the topic it needs, under 120 quiet stars" width="100%">
+  <img src="context-router-stars.svg" alt="A small AGENTS.md kernel routes a task to just the topic it needs, under 119 quiet stars" width="100%">
 </p>
 
 Worse, the rule that matters gets lost. Picture a 14 KB `AGENTS.md` where the only mention of *"never run `make reset-db` on shared"* sits inside a 2026-03 acceptance log that no agent will ever read carefully.
+
+<p align="center">
+  <img src="context-router-comic-overload.svg" alt="A three-panel comic: an agent is overwhelmed by a huge AGENTS.md, searches for one buried rule, then uses a small kernel and organized topic pages" width="100%">
+</p>
 
 ```
 Before                                  After
@@ -39,6 +43,10 @@ flowchart LR
 ```
 
 The kernel stays small, so the agent reads it carefully. Each topic loads only when the task needs it, and history stays out of the way until someone asks for it.
+
+<p align="center">
+  <img src="context-router-comic-routing.svg" alt="A three-panel comic showing a task passing through the kernel, selecting one matching wiki topic, and leaving unrelated pages closed" width="100%">
+</p>
 
 ## User stories
 
@@ -142,7 +150,36 @@ The skill costs about 25 s and 6k tokens more per run. The sample is small (n = 
 
 ## Quick start
 
-### With [skillshare](https://github.com/runkids/skillshare)
+### Install as a plugin
+
+#### Claude Code
+
+```text
+/plugin marketplace add runkids/agents-context-router
+/plugin install agents-context-router@agents-context-router
+```
+
+#### Codex
+
+```bash
+codex plugin marketplace add runkids/agents-context-router
+codex
+```
+
+Then open `/plugins`, find **agents-context-router**, and install it. Start a new session to use the skill.
+
+#### With [Skillshare](https://github.com/runkids/skillshare)
+
+Already using Skillshare? It can install this native plugin for Claude Code and Codex from one command, with per-agent install status and controls:
+
+```bash
+skillshare plugin add runkids/agents-context-router --plugin agents-context-router --target claude --target codex --global
+skillshare sync plugins
+```
+
+Skillshare also manages complete native plugins across [multiple coding agents](https://skillshare.runkids.cc/docs/reference/commands/plugin/), so you can keep your plugin setup in one place.
+
+### Install as a skill with [Skillshare](https://github.com/runkids/skillshare)
 
 ```bash
 # global: every project on this machine
