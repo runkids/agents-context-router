@@ -53,7 +53,7 @@ Some text changes buckets. A behaviour rule learned the hard way (for example "i
 
 ### 3. Move, then write
 
-1. **Before moving any log, pull out the live rules hidden in it.** Old logs often contain a rule that is still in force, written as an aside ("note: never run X on shared"). Once the log moves to history, no agent will ever see that rule again. Grep each log for imperative words in every language it uses, for example `never|always|must|do not|don't|warning|note:|禁止|絕對|不要|注意|必須`. For each hit that is still valid, copy it as a one-line rule into the kernel (if it applies to every task) or into its topic. List every promoted rule in your report.
+1. **Before moving any log, pull out the live rules hidden in it.** Old logs often contain a rule that is still in force, written as an aside ("note: never run X on shared"). Once the log moves to history, no agent will ever see that rule again. Grep each log for imperative words in every language it uses, for example `never|always|must|do not|don't|warning|note:|avoid|forbidden|required`. For each hit that is still valid, copy it as a one-line rule into the kernel (if it applies to every task) or into its topic. List every promoted rule in your report.
 2. Create `wiki/history/` and move milestone logs there **verbatim**, in their original language. Do not translate or summarise while moving. Verbatim moves are diffable and lose nothing.
 3. Design topics around **tasks the agent will be doing**, not around the old file order. Aim for 5–12 topics. Each one gets a kebab-case name and a single "use when…" line. Ask: "an agent is about to do X; which pages must it see?"
 4. Write the topic pages. Move reference text and runbooks in, and cut the duplication the old file had.
