@@ -2,3 +2,4 @@
 .skillshare/
 *-workspace/
 __pycache__/
+!skills/agents-context-router/evals/fixtures/*/.claude/
