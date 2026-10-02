@@ -55,7 +55,14 @@ codex
 
 ### Skillshare
 
-[Skillshare](https://github.com/runkids/skillshare)를 이미 사용 중인가요? 다른 에이전트 플러그인과 함께 Claude Code와 Codex에 이 플러그인을 설치하고 동기화할 수 있습니다.
+[Skillshare](https://github.com/runkids/skillshare)를 이미 사용 중인가요? 일반 스킬로 설치하고 모든 타깃에 동기화할 수 있습니다.
+
+```bash
+skillshare install runkids/agents-context-router --global
+skillshare sync
+```
+
+또는 완전한 네이티브 플러그인으로 설치해 다른 에이전트 플러그인과 함께 Claude Code와 Codex에 동기화할 수도 있습니다.
 
 ```bash
 skillshare plugin add runkids/agents-context-router \
@@ -103,7 +110,7 @@ wiki/history/*.md         기본 context에서 제외되는 날짜별 기록
 wiki/README.md            사람이 읽는 topic 및 기록 목록
 ```
 
-포함된 스크립트는 Python 표준 라이브러리만 사용합니다(Python 3.8 이상). 제목을 정확히 참조하며, 제목이 없거나 중복되면 실패하므로 제목이 바뀐 뒤 잘못된 지침이 조용히 로드되지 않습니다.
+포함된 스크립트는 Python 표준 라이브러리만 사용합니다(Python 3.8 이상).예시는 `python3`를 사용합니다. Windows에서는 `python` 또는 `py -3`를 사용하세요. 스킬이 라우터를 설치할 때 알맞은 명령을 고릅니다. 제목을 정확히 참조하며, 제목이 없거나 중복되면 실패하므로 제목이 바뀐 뒤 잘못된 지침이 조용히 로드되지 않습니다.
 
 ## 기여
 

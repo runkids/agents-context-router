@@ -55,7 +55,14 @@ codex
 
 ### Skillshare
 
-Already use [Skillshare](https://github.com/runkids/skillshare)? Install and sync this plugin to Claude Code and Codex alongside your other agent plugins:
+Already use [Skillshare](https://github.com/runkids/skillshare)? Install it as a plain skill and sync it to all your targets:
+
+```bash
+skillshare install runkids/agents-context-router --global
+skillshare sync
+```
+
+Or install the complete native plugin and sync it to Claude Code and Codex alongside your other agent plugins:
 
 ```bash
 skillshare plugin add runkids/agents-context-router \
@@ -103,7 +110,7 @@ wiki/history/*.md         Dated records, kept out of default context
 wiki/README.md            Human-readable topic and history index
 ```
 
-The bundled script uses only the Python standard library (Python 3.8+). Exact-heading references fail if a heading is missing or duplicated, so a renamed section cannot silently route the wrong instructions.
+The bundled script uses only the Python standard library (Python 3.8+). Examples use `python3`; on Windows use `python` or `py -3` instead. The skill tells the agent to pick the right command when it installs the router. Exact-heading references fail if a heading is missing or duplicated, so a renamed section cannot silently route the wrong instructions.
 
 ## Contributing
 

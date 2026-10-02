@@ -55,7 +55,14 @@ codex
 
 ### Skillshare
 
-已經在用 [Skillshare](https://github.com/runkids/skillshare) 嗎？可以和其他 Agent plugin 一起，將這個 plugin 安裝並同步到 Claude Code 和 Codex：
+已經在用 [Skillshare](https://github.com/runkids/skillshare) 嗎？可以當作一般 skill 安裝，並同步到所有 target：
+
+```bash
+skillshare install runkids/agents-context-router --global
+skillshare sync
+```
+
+或安裝完整的原生 plugin，和其他 Agent plugin 一起同步到 Claude Code 和 Codex：
 
 ```bash
 skillshare plugin add runkids/agents-context-router \
@@ -103,7 +110,7 @@ wiki/history/*.md         不會預設載入 context 的日期紀錄
 wiki/README.md            給人看的 topic 與歷史索引
 ```
 
-隨附腳本只使用 Python 標準函式庫（Python 3.8+）。標題引用必須精確比對；若標題不存在或重複，檢查就會失敗，避免標題改名後悄悄載入錯誤內容。
+隨附腳本只使用 Python 標準函式庫（Python 3.8+）。範例使用 `python3`；Windows 請改用 `python` 或 `py -3`。skill 會在安裝 router 時選擇合適的指令。標題引用必須精確比對；若標題不存在或重複，檢查就會失敗，避免標題改名後悄悄載入錯誤內容。
 
 ## 參與貢獻
 

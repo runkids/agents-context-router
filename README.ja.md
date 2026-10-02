@@ -55,7 +55,14 @@ codex
 
 ### Skillshare
 
-[Skillshare](https://github.com/runkids/skillshare) を使っていますか？ほかのエージェント用プラグインと一緒に、Claude Code と Codex へインストールして同期できます。
+[Skillshare](https://github.com/runkids/skillshare) を使っていますか？通常のスキルとしてインストールし、すべてのターゲットへ同期できます。
+
+```bash
+skillshare install runkids/agents-context-router --global
+skillshare sync
+```
+
+または、完全なネイティブプラグインとして、ほかのエージェント用プラグインと一緒に Claude Code と Codex へインストールして同期できます。
 
 ```bash
 skillshare plugin add runkids/agents-context-router \
@@ -103,7 +110,7 @@ wiki/history/*.md         通常のコンテキストに含めない日付付き
 wiki/README.md            人向けのトピック・履歴一覧
 ```
 
-同梱スクリプトは Python 標準ライブラリのみを使います（Python 3.8 以降）。正確な見出しを参照し、見出しがない場合や重複している場合は失敗するため、名前変更後に誤った指示が読み込まれることはありません。
+同梱スクリプトは Python 標準ライブラリのみを使います（Python 3.8 以降）。例では `python3` を使っています。Windows では `python` または `py -3` を使ってください。スキルがルーターの導入時に適切なコマンドを選びます。正確な見出しを参照し、見出しがない場合や重複している場合は失敗するため、名前変更後に誤った指示が読み込まれることはありません。
 
 ## コントリビュート
 
