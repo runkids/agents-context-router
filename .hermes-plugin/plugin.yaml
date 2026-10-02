@@ -1,0 +1,3 @@
+name: agents-context-router
+description: Route coding agents to only the repository context each task needs.
+author: runkids

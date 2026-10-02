@@ -1,0 +1,10 @@
+{
+  "name": "agents-context-router",
+  "description": "Route coding agents to only the repository context each task needs.",
+  "license": "MIT",
+  "repository": "https://github.com/runkids/agents-context-router",
+  "keywords": ["pi-package", "agents", "context", "documentation", "skills"],
+  "pi": {
+    "skills": ["./skills"]
+  }
+}

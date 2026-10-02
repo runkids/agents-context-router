@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "name": "agents-context-router",
+  "displayName": "Agents Context Router",
+  "description": "Route coding agents to only the repository context each task needs.",
+  "compat": {
+    "source": "native",
+    "manifestDir": ".muse-plugin"
+  },
+  "capabilities": {
+    "skills": [
+      {
+        "id": "agents-context-router",
+        "path": "skills/agents-context-router/SKILL.md"
+      }
+    ],
+    "commands": [],
+    "hooks": [],
+    "mcpServers": [],
+    "reminders": []
+  }
+}

@@ -73,6 +73,28 @@ skillshare sync plugins
 
 Skillshare 可以集中管理完整的原生插件，并查看各 Agent 的安装状态。参阅 [插件命令指南](https://skillshare.runkids.cc/docs/reference/commands/plugin/)。
 
+### Pi / Hermes / Kimi Code / Muse
+
+本仓库还包含其他 Agent 的原生 manifest：
+
+```bash
+# Pi
+pi install git:github.com/runkids/agents-context-router
+
+# Hermes Agent
+hermes plugins install runkids/agents-context-router --enable
+
+# Muse
+git clone https://github.com/runkids/agents-context-router.git
+muse plugins install ./agents-context-router
+muse plugins approve agents-context-router
+```
+
+```text
+# Kimi Code
+/plugins install https://github.com/runkids/agents-context-router
+```
+
 ### 其他兼容 skill 的 Agent
 
 使用 [Vercel Skills CLI](https://github.com/vercel-labs/skills) 安装：

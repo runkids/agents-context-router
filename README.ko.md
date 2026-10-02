@@ -73,6 +73,28 @@ skillshare sync plugins
 
 Skillshare로 여러 네이티브 플러그인을 한곳에서 관리하고 에이전트별 설치 상태를 확인하세요. [플러그인 명령 가이드](https://skillshare.runkids.cc/docs/reference/commands/plugin/)를 참고하세요.
 
+### Pi / Hermes / Kimi Code / Muse
+
+이 저장소에는 다른 에이전트용 네이티브 manifest도 들어 있습니다.
+
+```bash
+# Pi
+pi install git:github.com/runkids/agents-context-router
+
+# Hermes Agent
+hermes plugins install runkids/agents-context-router --enable
+
+# Muse
+git clone https://github.com/runkids/agents-context-router.git
+muse plugins install ./agents-context-router
+muse plugins approve agents-context-router
+```
+
+```text
+# Kimi Code
+/plugins install https://github.com/runkids/agents-context-router
+```
+
 ### 기타 스킬 호환 에이전트
 
 [Vercel Skills CLI](https://github.com/vercel-labs/skills)로 스킬을 설치할 수 있습니다.

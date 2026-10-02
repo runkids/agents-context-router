@@ -1,0 +1,19 @@
+{
+  "name": "agents-context-router",
+  "description": "Route coding agents to only the repository context each task needs.",
+  "owner": {
+    "name": "runkids",
+    "url": "https://github.com/runkids"
+  },
+  "plugins": [
+    {
+      "name": "agents-context-router",
+      "description": "Route coding agents to only the repository context each task needs.",
+      "source": "./",
+      "author": {
+        "name": "runkids",
+        "url": "https://github.com/runkids"
+      }
+    }
+  ]
+}

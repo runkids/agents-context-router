@@ -73,6 +73,28 @@ skillshare sync plugins
 
 Skillshare keeps complete native plugins in one place and shows each agent's install status. See the [plugin command guide](https://skillshare.runkids.cc/docs/reference/commands/plugin/).
 
+### Pi, Hermes, Kimi Code and Muse
+
+Native manifests for more agents live in this repository:
+
+```bash
+# Pi
+pi install git:github.com/runkids/agents-context-router
+
+# Hermes Agent
+hermes plugins install runkids/agents-context-router --enable
+
+# Muse
+git clone https://github.com/runkids/agents-context-router.git
+muse plugins install ./agents-context-router
+muse plugins approve agents-context-router
+```
+
+```text
+# Kimi Code
+/plugins install https://github.com/runkids/agents-context-router
+```
+
 ### Other skill-compatible agents
 
 Install it as a skill with [Vercel's Skills CLI](https://github.com/vercel-labs/skills):
