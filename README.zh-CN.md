@@ -26,7 +26,7 @@
 
 - 测量拆分前后每次都会加载的指令文件大小。
 - 将内容分类为共用规则、任务 topic、历史记录和面向人的文档。
-- 通过 `docs/ai-context.json` 将 topic 映射到完整文件或精确的 Markdown 标题。
+- 通过 `wiki/ai-context.json` 将 topic 映射到完整文件或精确的 Markdown 标题。
 - 内置无额外依赖的 `scripts/ai-context.py`，支持 `list`、topic 输出和 `check`。
 - 检查字节数上限、缺失或重复的标题、未列出的 topic，以及未被路由的 wiki／history 文件。
 - 在仓库内添加维护指南，方便移除 skill 后继续维护路由结构。
@@ -96,7 +96,7 @@ python3 scripts/ai-context.py check
 
 ```text
 AGENTS.md                 每次加载的规则和 topic 索引
-docs/ai-context.json      topic 与文档的映射
+wiki/ai-context.json      topic 与文档的映射
 scripts/ai-context.py     输出 topic 并检查文档
 wiki/<topic>.md           任务指南和操作手册
 wiki/history/*.md         不会默认载入上下文的日期记录

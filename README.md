@@ -26,7 +26,7 @@ Keep rules that apply to every task in `AGENTS.md`. Move runbooks and reference 
 
 - Measures always-loaded instruction files before and after the split.
 - Sorts content into a small kernel, task topics, history, and human docs.
-- Routes each topic to whole files or exact Markdown headings through `docs/ai-context.json`.
+- Routes each topic to whole files or exact Markdown headings through `wiki/ai-context.json`.
 - Bundles `scripts/ai-context.py`, a dependency-free router with `list`, topic, and `check` commands.
 - Checks byte budgets, missing or ambiguous headings, unlisted topics, and orphaned wiki/history files.
 - Adds an in-repo maintenance guide so the router can be maintained after the skill is removed.
@@ -96,7 +96,7 @@ python3 scripts/ai-context.py check
 
 ```text
 AGENTS.md                 Always-loaded rules and topic index
-docs/ai-context.json      Topic-to-document map
+wiki/ai-context.json      Topic-to-document map
 scripts/ai-context.py     Print topics and check the docs
 wiki/<topic>.md           Task-specific guides and runbooks
 wiki/history/*.md         Dated records, kept out of default context

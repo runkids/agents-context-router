@@ -26,7 +26,7 @@
 
 - 분할 전후에 항상 로드되는 지침 파일의 크기를 측정합니다.
 - 내용을 공통 규칙, 작업별 topic, history, 사용자 문서로 분류합니다.
-- `docs/ai-context.json`에서 topic을 파일 전체 또는 정확한 Markdown 제목에 연결합니다.
+- `wiki/ai-context.json`에서 topic을 파일 전체 또는 정확한 Markdown 제목에 연결합니다.
 - 의존성이 없는 `scripts/ai-context.py`를 포함하며 `list`, topic 출력, `check`를 지원합니다.
 - 바이트 예산, 누락되거나 중복된 제목, 목록에 없는 topic, 연결되지 않은 wiki/history 파일을 검사합니다.
 - 스킬을 제거한 뒤에도 router를 유지할 수 있도록 저장소 안에 관리 가이드를 추가합니다.
@@ -96,7 +96,7 @@ python3 scripts/ai-context.py check
 
 ```text
 AGENTS.md                 항상 로드하는 규칙과 topic 목록
-docs/ai-context.json      topic과 문서의 매핑
+wiki/ai-context.json      topic과 문서의 매핑
 scripts/ai-context.py     topic 출력 및 문서 검사
 wiki/<topic>.md           작업별 가이드와 runbook
 wiki/history/*.md         기본 context에서 제외되는 날짜별 기록

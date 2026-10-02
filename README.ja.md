@@ -26,7 +26,7 @@
 
 - 常時読み込まれる指示ファイルの分割前後のサイズを計測。
 - 内容を共通ルール、タスク別トピック、履歴、人向けドキュメントに分類。
-- `docs/ai-context.json` で、トピックとファイル全体または正確な見出しを対応付け。
+- `wiki/ai-context.json` で、トピックとファイル全体または正確な見出しを対応付け。
 - 依存関係のない `scripts/ai-context.py` を同梱。`list`、トピック表示、`check` に対応。
 - バイト数の上限、見出しの欠落や重複、一覧にないトピック、参照されない wiki／履歴ファイルを検査。
 - スキルを削除した後もルーターを保守できるよう、リポジトリ内のガイドを追加。
@@ -96,7 +96,7 @@ python3 scripts/ai-context.py check
 
 ```text
 AGENTS.md                 常時読み込むルールとトピック一覧
-docs/ai-context.json      トピックとドキュメントの対応表
+wiki/ai-context.json      トピックとドキュメントの対応表
 scripts/ai-context.py     トピック表示とドキュメント検査
 wiki/<topic>.md           タスク別ガイドと手順書
 wiki/history/*.md         通常のコンテキストに含めない日付付き記録
