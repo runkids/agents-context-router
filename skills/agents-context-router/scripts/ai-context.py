@@ -44,7 +44,7 @@ def headings(lines):
 
 
 def section(src):
-    path = os.path.realpath(os.path.join(ROOT, src['path']))
+    path = os.path.realpath(os.path.join(ROOT, src['path'].replace('\\', '/')))
     if not path.startswith(ROOT + os.sep):
         raise ValueError(f'{src["path"]}: outside repo')
     with open(path, encoding='utf-8') as f:
@@ -74,8 +74,8 @@ def orphans(cfg):
     history = cfg.get('historyDir', f'{wiki}/history')
     router = cfg.get('routerFile', f'{wiki}/README.md')
     root_file = cfg.get('rootInstructions', 'AGENTS.md')
-    routed = {s['path'] for t in cfg['topics'].values() for s in t['sources']}
-    allowed = set(cfg.get('unrouted', {}))
+    routed = {s['path'].replace('\\', '/') for t in cfg['topics'].values() for s in t['sources']}
+    allowed = {p.replace('\\', '/') for p in cfg.get('unrouted', {})}
     router_text = open(os.path.join(ROOT, router), encoding='utf-8').read() if os.path.exists(os.path.join(ROOT, router)) else ''
     bad = []
     skip = {'.git', 'node_modules', 'dist', 'build', 'vendor', '.venv', 'target'}
@@ -125,6 +125,7 @@ def check(cfg):
 
 
 def main(argv):
+    sys.stdout.reconfigure(encoding='utf-8')  # section markers and CJK pages break cp1252/cp950 consoles on Windows
     cfg = load_cfg()
     args = argv[1:] or ['list']
     if args == ['list']:
