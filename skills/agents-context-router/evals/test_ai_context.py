@@ -564,6 +564,15 @@ class LinkCheckTests(unittest.TestCase):
         self.assertEqual(sum('wiki/guide.md:2:' in e for e in errors), 1, errors)
 
     def test_context_masks_examples_but_keeps_live_continuations(self):
+        for outer_indent in range(4):
+            for outer_depth in range(1, 4):
+                prefix = ' ' * outer_indent + '> ' * outer_depth
+                text = (prefix + '- item\n' + prefix + '   > ```\n' + prefix +
+                        '   > foo ``` [x](missing.md)\n' + prefix + '   > ```\n\n[live](live-missing.md)')
+                with self.subTest(outer_indent=outer_indent, outer_depth=outer_depth):
+                    errors = self.problems(text)
+                    self.assertEqual(len(errors), 1, errors)
+                    self.assertIn('live-missing.md', errors[0])
         for padding, columns in [('\t', 4), ('\t ', 5), ('\t  ', 6), ('\t   ', 7)]:
             text = '- item\n' + padding + '> [live](target.txt)'
             self.assertEqual(len(self.problems(text)), 1, text)

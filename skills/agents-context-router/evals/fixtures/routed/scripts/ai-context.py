@@ -315,13 +315,21 @@ def definition_candidate(lines, index, content, depth, list_indent):
     return definition
 
 
+def leading_quote(line, list_indent):
+    """Keep an outer quote's indentation ahead of a nested list quote."""
+    match = re.match(r'^((?: {0,3}>[ \t]?)+)([ \t]+)>', line)
+    if match and list_indent and indent_prefix(match[2])[1] >= list_indent:
+        return match.end(1), [match[1]]
+    return 0, []
+
+
 def container_prefix(line, list_indent):
     """Put quote markers before list prefixes while retaining source offsets."""
-    pos, quotes, lists, saw_list, nested, indentation = 0, [], [], False, False, 0
+    pos, quotes = leading_quote(line, list_indent)
+    lists, saw_list, nested, indentation = [], False, False, 0
     while pos < len(line):
         start = pos
-        while pos < len(line) and line[pos] in ' \t':
-            pos += 1
+        pos += indent_prefix(line[pos:])[0]
         space = line[start:pos]
         indentation += indent_prefix(space)[1]
         if line[pos:pos + 1] == '>' and not (list_indent and not saw_list and indentation >= list_indent + 4):
