@@ -28,7 +28,8 @@ from html import unescape
 ROOT = os.path.realpath(os.environ.get('AI_CONTEXT_ROOT') or os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CFG_PATH = os.path.realpath(os.environ.get('AI_CONTEXT_CONFIG') or os.path.join(ROOT, 'wiki', 'ai-context.json'))
 HEAD = re.compile(r'^(#{1,6})\s+(.+?)\s*#*\s*$')
-FENCE = re.compile(r'^ {0,3}(`{3,}|~{3,})')
+FENCE = re.compile(r'^\s{0,3}(`{3,}|~{3,})')
+LINK_FENCE = re.compile(r'^ {0,3}(`{3,}|~{3,})')
 TITLE = r'(?:"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|\((?:\\.|[^)\\])*\))'
 HTML_TAG = re.compile(r"</?[A-Za-z][A-Za-z0-9-]*(?:\s+(?:[^<>\"']|\"[^\"]*\"|'[^']*')*)?\s*/?>")
 
@@ -295,7 +296,7 @@ def markdown_text(lines):
             elif content.strip():
                 list_indent = 0
         indent = indent_prefix(content, start=base_column)[1]
-        mark = FENCE.match(content)
+        mark = LINK_FENCE.match(content)
         if fence:
             result.append(blank(ln))
             if mark and mark[1].startswith(fence) and not content[mark.end():].strip():
@@ -310,7 +311,7 @@ def markdown_text(lines):
         if indent >= 4 and not paragraph:
             result.append(blank(ln))
             continue
-        mark = FENCE.match(content)
+        mark = LINK_FENCE.match(content)
         html = re.match(r'^ {0,3}<(pre|script|style|textarea)(?:\s|>|$)', content, re.I)
         if mark and (mark[1][0] == '~' or '`' not in content[mark.end():]):
             fence = mark[1]

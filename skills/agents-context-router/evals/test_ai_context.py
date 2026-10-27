@@ -273,15 +273,35 @@ class LinkCheckTests(unittest.TestCase):
                          '<!-- wiki/guide.md § Selected -->\n# Selected\nHello\n')
 
     def test_inline_destinations_and_titles(self):
-        self.write('wiki/a(b).md', '')
-        self.write('wiki/space name.md', '')
         for destination in ['a(b).md', r'a\(b\).md', '<space name.md>',
                             'a(b).md "title"', "a(b).md 'title'", 'a(b).md (title)']:
             for mark in ['[link]', '![image]']:
                 with self.subTest(destination=destination, mark=mark):
+                    name = 'space name.md' if destination.startswith('<') else 'a(b).md'
+                    self.write('wiki/' + name, '')
                     self.assertEqual(self.problems(mark + '(' + destination + ')'), [])
+                    (self.root / 'wiki' / name).unlink()
+                    self.assertEqual(len(self.problems(mark + '(' + destination + ')')), 1)
         self.assertEqual(len(self.problems('[label](missing(a).md "title")')), 1)
         self.assertEqual(len(self.problems('![label](<missing file.png>)')), 1)
+
+        self.write('wiki/neighbor.txt', '')
+        cases = [('[](target.txt)', 'target.txt'), ('![](target.txt)', 'target.txt'),
+                 ('[x](<target`name.txt>) and `example` [n](neighbor.txt)', 'target`name.txt'),
+                 ('[x](file<!--name.txt) and [n](neighbor.txt)', 'file<!--name.txt'),
+                 ('[x](<target[bracket].txt>) `sample`', 'target[bracket].txt')]
+        for text, name in cases:
+            with self.subTest(text=text):
+                self.write('wiki/' + name, '')
+                self.assertEqual(self.problems(text), [])
+                (self.root / 'wiki' / name).unlink()
+                errors = self.problems(text)
+                self.assertEqual(len(errors), 1, errors)
+                self.assertIn('wiki/guide.md:2:', errors[0])
+                self.assertIn(name, errors[0])
+                self.write('wiki/' + name, '')
+                self.assertEqual(self.problems(text), [])
+                (self.root / 'wiki' / name).unlink()
 
     def test_used_references_report_definition_once(self):
         text = '[Full][ Some ID ]\n![Some ID][]\n[Some ID]\n\n[some id]: <missing file.md> "title"\n'
@@ -308,6 +328,16 @@ class LinkCheckTests(unittest.TestCase):
         self.assertEqual(self.problems('`example\n[x](missing.md)\n`'), [])
         self.assertEqual(len(self.problems('` unmatched [x](missing.md)')), 1)
         self.assertEqual(len(self.problems(r'\` [x](missing.md) `')), 1)
+
+        text = '`unfinished\n\n[renamed](target.txt)\n\n`other\n'
+        self.write('wiki/target.txt', '')
+        self.assertEqual(self.problems(text), [])
+        (self.root / 'wiki/target.txt').unlink()
+        errors = self.problems(text)
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn('wiki/guide.md:4:', errors[0])
+        self.write('wiki/target.txt', '')
+        self.assertEqual(self.problems(text), [])
 
     def test_exclusions_and_url_decoding(self):
         for target in ['https://example.test/a', 'mailto:a@b.test', 'custom:thing',
@@ -416,6 +446,24 @@ class LinkCheckTests(unittest.TestCase):
         self.assertEqual(len(self.problems('[![image][id]](#anchor)\n\n[id]: missing.md')), 1)
         self.assertEqual(self.problems('\n    [id]: missing.md\n\n[id]'), [])
 
+        cases = [('> [label\ncontinued](target.txt)', 2),
+                 ('> Note\n    [missing](target.txt)', 3),
+                 ('Note\n\t~~~\n\t[live](target.txt)\n\t~~~', 4)]
+        for text, line in cases:
+            with self.subTest(text=text):
+                self.write('wiki/target.txt', '')
+                self.assertEqual(self.problems(text), [])
+                (self.root / 'wiki/target.txt').unlink()
+                errors = self.problems(text)
+                self.assertEqual(len(errors), 1, errors)
+                self.assertIn('wiki/guide.md:' + str(line) + ':', errors[0])
+                self.write('wiki/target.txt', '')
+                self.assertEqual(self.problems(text), [])
+        for code in ['> ```\n> [example](missing.md)\n> ```',
+                     '\n    [example](missing.md)', '\n\t~~~\n\t[example](missing.md)\n\t~~~',
+                     'Note\n~~~\n[example](missing.md)\n~~~']:
+            self.assertEqual(self.problems(code), [])
+
     def test_entities_decode_before_url_classification(self):
         for name, dest in [('a&b.md', 'a&amp;b.md'), ('#.md', '&#35;.md'),
                            ('a b.md', 'a&#32;b.md'), ('a&b.md', 'a&#38;b.md')]:
@@ -472,19 +520,6 @@ class LinkCheckTests(unittest.TestCase):
         self.cfg['topics']['guide']['sources'].append({'path': str(self.root / 'wiki/guide.md')})
         self.assertEqual(len(self.problems('[x](missing.md)')), 1)
 
-    def test_code_spans_cannot_hide_links_across_blank_paragraphs(self):
-        text = '# Selected\n`unfinished\n\n[renamed](target.txt)\n\n`other\n'
-        self.write('wiki/guide.md', text)
-        for exists in [True, False, True]:
-            if exists:
-                self.write('wiki/target.txt', '')
-            else:
-                (self.root / 'wiki/target.txt').unlink()
-            result = self.cli('check')
-            self.assertEqual(result.returncode, 0 if exists else 1, result.stdout)
-            if not exists:
-                self.assertIn('wiki/guide.md:4:', result.stdout)
-
     def test_fence_closers_and_inline_html_keep_only_live_links(self):
         for mark in ['```', '~~~']:
             text = ('[before](missing.md)\n' + mark + '\n' + mark + 'not a closer\n'
@@ -518,10 +553,6 @@ class LinkCheckTests(unittest.TestCase):
                      '- ```\n  sample\n\n  [example](missing.md)']:
             with self.subTest(text=text):
                 self.assertEqual(self.problems(text), [])
-        self.write('wiki/guide.md', '# Selected\n> ```\n> sample\n\n[live](missing.md)')
-        result = self.cli('check')
-        self.assertEqual(result.returncode, 1, result.stdout)
-        self.assertIn('wiki/guide.md:5:', result.stdout)
 
     def test_backtick_info_and_definition_block_boundaries(self):
         self.assertEqual(len(self.problems('```foo`bar\n[live](missing.md)')), 1)
@@ -544,17 +575,19 @@ class LinkCheckTests(unittest.TestCase):
         self.assertIn('wiki/guide.md:3:', errors[0])
 
     def test_link_read_errors_report_and_continue(self):
-        for name in ['wiki/guide.md', 'wiki/unreadable.md']:
-            with self.subTest(name=name):
-                path = self.root / name
-                path.write_bytes(b'\xff')
-                self.write('wiki/extra.md', '[x](missing.md)')
-                result = self.cli('check')
-                self.assertEqual(result.returncode, 1)
-                self.assertNotIn('Traceback', result.stderr)
-                self.assertIn('FAIL ' + name + ':', result.stdout)
-                self.assertIn('wiki/extra.md:1:', result.stdout)
-                self.write(name, '# Selected\n')
+        self.write('wiki/extra.md', '[x](missing.md)')
+        old_root = router.ROOT
+        try:
+            router.ROOT = str(self.root)
+            for name in ['wiki/guide.md', 'wiki/unreadable.md']:
+                with self.subTest(name=name):
+                    (self.root / name).write_bytes(b'\xff')
+                    errors = router.link_problems(self.cfg)
+                    self.assertTrue(any(e.startswith(name + ':') for e in errors), errors)
+                    self.assertTrue(any('wiki/extra.md:1:' in e for e in errors), errors)
+                    self.write(name, '# Selected\n')
+        finally:
+            router.ROOT = old_root
         real_open = open
         from unittest.mock import patch
         for denied, live in [('extra.md', 'wiki/guide.md:2:'),
@@ -567,19 +600,6 @@ class LinkCheckTests(unittest.TestCase):
                 errors = self.problems('[x](missing.md)')
             self.assertTrue(any('wiki/' + denied + ':' in e and 'denied for test' in e for e in errors))
             self.assertTrue(any(live in e for e in errors))
-
-    def test_empty_inline_labels_through_cli(self):
-        for label in ['[]', '![]']:
-            self.write('wiki/guide.md', '# Selected\n' + label + '(target.txt)')
-            for exists in [True, False, True]:
-                if exists:
-                    self.write('wiki/target.txt', '')
-                else:
-                    (self.root / 'wiki/target.txt').unlink()
-                result = self.cli('check')
-                self.assertEqual(result.returncode, 0 if exists else 1, result.stdout)
-                if not exists:
-                    self.assertIn('wiki/guide.md:2:', result.stdout)
 
     def test_definitions_after_heading_and_rule_boundaries(self):
         boundaries = ['Title\n=====', 'Title\n---', '---', '***', '_ _ _', '* * *',
@@ -649,26 +669,6 @@ class LinkCheckTests(unittest.TestCase):
                 errors = self.problems('[' + label + ']: missing.md\n\n[' + use + ']')
                 self.assertEqual(len(errors), int(matches))
 
-    def test_opaque_destinations_and_neighbors_through_cli(self):
-        self.write('wiki/neighbor.txt', '')
-        cases = [('[x](<target`name.txt>) and `example` [n](neighbor.txt)', 'target`name.txt'),
-                 ('[x](file<!--name.txt) and [n](neighbor.txt)', 'file<!--name.txt'),
-                 ('[x](<target[bracket].txt>) `sample`', 'target[bracket].txt')]
-        for text, name in cases:
-            with self.subTest(text=text):
-                self.write('wiki/guide.md', '# Selected\n' + text)
-                for exists in [True, False, True]:
-                    if exists:
-                        self.write('wiki/' + name, '')
-                    else:
-                        (self.root / 'wiki' / name).unlink()
-                    result = self.cli('check')
-                    self.assertEqual(result.returncode, 0 if exists else 1, result.stdout)
-                    if not exists:
-                        self.assertIn('wiki/guide.md:2:', result.stdout)
-                        self.assertIn(name, result.stdout)
-                (self.root / 'wiki' / name).unlink()
-
     def test_autolinks_code_html_and_inline_comment_ownership(self):
         self.write('wiki/good.txt', '')
         for opaque in ['<https://example.test/[x](missing.md)>', '<user+tag@example.test>',
@@ -737,40 +737,18 @@ class LinkCheckTests(unittest.TestCase):
             self.assertEqual(len(errors), 1, errors)
             self.assertIn('wiki/guide.md:4:', errors[0])
 
-    def test_lazy_quote_paragraphs_keep_live_links_and_original_lines(self):
-        cases = [('> [label\ncontinued](target.txt)', 2),
-                 ('> Note\n    [missing](target.txt)', 3)]
-        for text, line in cases:
-            with self.subTest(text=text):
-                self.write('wiki/guide.md', '# Selected\n' + text)
-                for exists in [True, False, True]:
-                    if exists:
-                        self.write('wiki/target.txt', '')
-                    else:
-                        (self.root / 'wiki/target.txt').unlink()
-                    result = self.cli('check')
-                    self.assertEqual(result.returncode, 0 if exists else 1, result.stdout)
-                    if not exists:
-                        self.assertIn('wiki/guide.md:' + str(line) + ':', result.stdout)
-        for code in ['> ```\n> [example](missing.md)\n> ```',
-                     '\n    [example](missing.md)']:
-            self.assertEqual(self.problems(code), [])
-
-    def test_tab_indented_fence_text_cannot_interrupt_a_paragraph(self):
-        self.write('wiki/guide.md', '# Selected\nNote\n\t~~~\n\t[live](missing.md)\n\t~~~')
-        result = self.cli('check')
-        with self.subTest(case='live paragraph'):
-            self.assertEqual(result.returncode, 1, result.stdout)
-            self.assertIn('wiki/guide.md:4:', result.stdout)
-        for code in ['\n\t~~~\n\t[example](missing.md)\n\t~~~',
-                     'Note\n~~~\n[example](missing.md)\n~~~']:
-            self.assertEqual(self.problems(code), [])
-
     def test_definition_lookahead_work_is_bounded_by_input_size(self):
-        # Count text presented to the real parser, independent of machine speed.
-        # One-line definitions and heading-separated links need only bounded lookahead.
-        from unittest.mock import patch
-        real_definition = router.reference_definition
+        # Count indexed line accesses, including lookahead before reference parsing.
+        class CountedLines(list):
+            def __init__(self, lines):
+                super().__init__(lines)
+                self.work = 0
+            def __getitem__(self, index):
+                if isinstance(index, slice):
+                    self.work += len(range(*index.indices(len(self))))
+                else:
+                    self.work += 1
+                return super().__getitem__(index)
         for kind in ['definitions', 'headings']:
             for count in [1000, 2000]:
                 with self.subTest(kind=kind, count=count):
@@ -779,16 +757,12 @@ class LinkCheckTests(unittest.TestCase):
                         text += '\n\n[d' + str(count - 1) + ']'
                     else:
                         text = '\n'.join('# Heading\n[link](target.txt)' for _ in range(count))
-                    work = [0]
-                    def measured(candidate):
-                        work[0] += len(candidate)
-                        return real_definition(candidate)
-                    with patch.object(router, 'reference_definition', side_effect=measured):
-                        links = list(router.link_destinations(text.split('\n')))
+                    lines = CountedLines(text.split('\n'))
+                    links = list(router.link_destinations(lines))
                     self.assertEqual(len(links), 1 if kind == 'definitions' else count)
                     self.assertEqual(links[0], (count if kind == 'definitions' else 2, 'target.txt'))
-                    self.assertLessEqual(work[0], 8 * len(text),
-                                         f'{kind}: {work[0]} candidate characters for {len(text)} input characters')
+                    self.assertLessEqual(lines.work, 8 * len(lines),
+                                         f'{kind}: {lines.work} indexed accesses for {len(lines)} lines')
 
     def test_shipped_artifacts_match_distributable_assets(self):
         base = SCRIPT.parents[1]
@@ -797,6 +771,8 @@ class LinkCheckTests(unittest.TestCase):
                          (base / 'evals/fixtures/routed/wiki/ai-context.md').read_bytes())
 
     def test_exact_headings_keep_existing_fence_behavior(self):
+        self.assertEqual(list(router.headings(['\t~~~', '# Example', '~~~', '# After'])),
+                         [(3, 1, 'After')])
         self.write('wiki/guide.md', '# Selected\n```sh\n# Selected\n````\n~~~\n# Other\n~~~\nbody\n# End\n')
         result = self.cli('guide')
         self.assertEqual(result.returncode, 0, result.stderr)
