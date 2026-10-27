@@ -609,6 +609,13 @@ class LinkCheckTests(unittest.TestCase):
         self.assertEqual(len(errors), 1, errors)
         self.assertIn('wiki/guide.md:4:', errors[0])
         self.assertIn('missing.md', errors[0])
+        for title in ['""', "''", '()', '"first\nend' + '\\' + '"\nlast"',
+                      '"first\nend' + '\\' * 2 + '"']:
+            text = '[id]: target.txt ' + title + '\n\n[id]'
+            self.write('wiki/target.txt', '')
+            self.assertEqual(self.problems(text), [])
+            (self.root / 'wiki/target.txt').unlink()
+            self.assertEqual(len(self.problems(text)), 1)
         for title in ['"first\nsecond"', "'first\nsecond'", '(first\nsecond)']:
             text = '[id]: target.txt ' + title + '\n\n[id]'
             self.write('wiki/target.txt', '')
@@ -692,6 +699,30 @@ class LinkCheckTests(unittest.TestCase):
 
     def test_wiki_inventory_failures_report_without_external_reads(self):
         from unittest.mock import patch
+        self.cfg['routerFile'] = 'docs/index.md'
+        index = self.root / 'docs/index.md'
+        index.parent.mkdir()
+        external = self.root.parent / 'external-index.md'
+        external.write_text('[hidden](missing.md)', encoding='utf-8')
+        real_open = open
+        def checked_open(path, *args, **kwargs):
+            self.assertNotEqual(Path(path).resolve(), external)
+            return real_open(path, *args, **kwargs)
+        for kind in ['missing', 'directory', 'external']:
+            if kind == 'directory':
+                index.mkdir()
+            elif kind == 'external':
+                index.symlink_to(external)
+            with self.subTest(router=kind), patch('builtins.open', side_effect=checked_open):
+                errors = self.problems('hello')
+                self.assertTrue(any('docs/index.md:' in error for error in errors), errors)
+            if kind == 'directory':
+                index.rmdir()
+            elif kind == 'external':
+                index.unlink()
+        self.write('docs/index.md', '[live](missing.md)')
+        self.assertTrue(any('docs/index.md:1:' in e for e in self.problems('hello')))
+        self.cfg.pop('routerFile')
         self.write('wiki/private/page.md', '[x](missing.md)')
         real_scandir = router.os.scandir
         def deny(directory):
@@ -822,6 +853,16 @@ class LinkCheckTests(unittest.TestCase):
                 else:
                     self.work += 1
                 return super().__getitem__(index)
+        for kind in ['even_slashes', 'column_zero']:
+            for count in [10, 20, 100]:
+                with self.subTest(kind=kind, count=count):
+                    title = ' "line\nend' + '\\' * 2 + '"' if kind == 'even_slashes' else '\n "line\n"'
+                    text = '\n'.join('[d' + str(i) + ']: target.txt' + title for i in range(count))
+                    text += '\n\n[d' + str(count - 1) + ']'
+                    lines = CountedLines(text.split('\n'))
+                    links = list(router.link_destinations(lines))
+                    self.assertEqual(links, [((2 if kind == 'even_slashes' else 3) * (count - 1) + 1, 'target.txt')])
+                    self.assertLessEqual(lines.work, 8 * len(lines), (kind, count, lines.work))
         for kind in ['definitions', 'headings', 'malformed_titles']:
             for count in [1000, 2000]:
                 with self.subTest(kind=kind, count=count):

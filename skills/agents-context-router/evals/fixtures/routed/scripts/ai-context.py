@@ -218,6 +218,15 @@ def title_continuations(lines):
         yield line
 
 
+def title_closed(line, closing):
+    """Match a trailing title delimiter preceded by an even backslash run."""
+    line = line.rstrip(' \t')
+    if not line.endswith(closing):
+        return False
+    prefix = line[:-1]
+    return (len(prefix) - len(prefix.rstrip('\\'))) % 2 == 0
+
+
 def definition_candidate(lines, index, content, depth, list_indent):
     """Collect only a possible definition and its optional continuation title."""
     candidate = [content]
@@ -261,7 +270,7 @@ def definition_candidate(lines, index, content, depth, list_indent):
         closing = ')' if tail[0] == '(' else tail[0]
         for next_line in title_continuations(rest):
             candidate.append(next_line)
-            if re.search(r'(?<!\\)' + re.escape(closing) + r'[ \t]*$', next_line):
+            if title_closed(next_line, closing):
                 break
         return reference_definition('\n'.join(candidate))
     # A title can start on the following line and span more than one line.
@@ -270,11 +279,13 @@ def definition_candidate(lines, index, content, depth, list_indent):
     if next_line is not None and next_line.lstrip().startswith(('"', "'", '(')):
         candidate.append(next_line)
         closing = ')' if next_line.lstrip()[0] == '(' else next_line.lstrip()[0]
-        while not re.search(r'(?<!\\)' + re.escape(closing) + r'[ \t]*$', candidate[-1][1:]):
+        fragment = next_line.lstrip()[1:]
+        while not title_closed(fragment, closing):
             next_line = next(title_rest, None)
             if next_line is None:
                 break
             candidate.append(next_line)
+            fragment = next_line
         extended = reference_definition('\n'.join(candidate))
         if extended:
             return extended
@@ -496,7 +507,8 @@ def link_problems(cfg):
     paths = {s['path'].replace('\\', '/') for t in cfg['topics'].values() for s in t['sources']}
     sources = {os.path.abspath(os.path.join(ROOT, p)) for p in paths}
     wiki = cfg.get('wikiDir', 'wiki')
-    paths.add(cfg.get('routerFile', f'{wiki}/README.md'))
+    router = os.path.abspath(os.path.join(ROOT, cfg.get('routerFile', f'{wiki}/README.md')))
+    paths.add(router)
     paths = {os.path.abspath(os.path.join(ROOT, p)) for p in paths}
     wiki_paths, bad = set(), []
     pending = [(os.path.join(ROOT, wiki), frozenset())]
@@ -521,7 +533,9 @@ def link_problems(cfg):
         rel = os.path.relpath(path, ROOT)
         canonical = os.path.realpath(path)
         if not canonical.startswith(ROOT + os.sep) or not os.path.isfile(path):
-            if path in wiki_paths and path not in sources:
+            if path == router:
+                bad.append(f'{rel}: router is not a file inside repo')
+            elif path in wiki_paths and path not in sources:
                 bad.append(f'{rel}: wiki page is not a file inside repo')
             continue  # Rendering retains ownership of invalid configured sources.
         try:
