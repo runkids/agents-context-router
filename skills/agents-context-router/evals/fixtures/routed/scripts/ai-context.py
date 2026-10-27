@@ -371,19 +371,19 @@ def markdown_text(lines):
             boundary = (thematic or BLOCK_HEADING.match(content) or
                         (paragraph and re.fullmatch(r' {0,3}(?:=+|-+)[ \t]*', content)))
             if content.strip():
-                eligible.append((line_index, not paragraph or bool(boundary), bool(boundary), (depth, list_indent)))
+                eligible.append((line_index, not paragraph or bool(boundary), bool(boundary)))
             paragraph = bool(content.strip()) and not boundary
     offsets = [0]
     for ln in result:
         offsets.append(offsets[-1] + len(ln) + 1)
-    regions, previous, ended, scope = [], -2, True, None
-    for index, starts, ends, container in eligible:
+    regions, previous, ended = [], -2, True
+    for index, starts, ends in eligible:
         end = offsets[index] + len(result[index])
-        if index == previous + 1 and not starts and not ended and container == scope:
+        if index == previous + 1 and not starts and not ended:
             regions[-1] = (regions[-1][0], end, regions[-1][2])
         else:
             regions.append((offsets[index], end, index + 1))
-        previous, ended, scope = index, ends, container
+        previous, ended = index, ends
     return '\n'.join(result), definitions, regions
 
 

@@ -446,7 +446,9 @@ class LinkCheckTests(unittest.TestCase):
         self.assertEqual(len(self.problems('[![image][id]](#anchor)\n\n[id]: missing.md')), 1)
         self.assertEqual(self.problems('\n    [id]: missing.md\n\n[id]'), [])
 
-        cases = [('> [label\ncontinued](target.txt)', 2),
+        cases = [('- See the [docs on\nconfiguration](target.txt)', 2),
+                 ('> - item\n    continued [x\nlazy](target.txt)', 3),
+                 ('> [label\ncontinued](target.txt)', 2),
                  ('> Note\n    [missing](target.txt)', 3),
                  ('Note\n\t~~~\n\t[live](target.txt)\n\t~~~', 4)]
         for text, line in cases:
@@ -459,6 +461,11 @@ class LinkCheckTests(unittest.TestCase):
                 self.assertIn('wiki/guide.md:' + str(line) + ':', errors[0])
                 self.write('wiki/target.txt', '')
                 self.assertEqual(self.problems(text), [])
+        for boundary in ['- [x\n\ny](missing.md)', '- [x\n# Heading\ny](missing.md)',
+                         '- [x\n- y](missing.md)', '- [x\n```\ny](missing.md)\n```',
+                         '> [x\n> > y](missing.md)']:
+            with self.subTest(boundary=boundary):
+                self.assertEqual(self.problems(boundary), [])
         for code in ['> ```\n> [example](missing.md)\n> ```',
                      '\n    [example](missing.md)', '\n\t~~~\n\t[example](missing.md)\n\t~~~',
                      'Note\n~~~\n[example](missing.md)\n~~~']:
