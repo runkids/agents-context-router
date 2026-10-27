@@ -293,12 +293,8 @@ def markdown_text(lines):
         if (fence or raw is not None) and (depth < owner[0] or
                 (owner[1] and content.strip() and indentation < owner[1])):
             fence, raw, paragraph = None, None, False
-        if depth != quote_depth:
-            if paragraph and depth < quote_depth and content.strip():
-                depth = quote_depth  # Lazy continuation of the current paragraph.
-            else:
-                paragraph, list_indent = False, 0
-        quote_depth = depth
+        if depth != quote_depth and not (paragraph and depth < quote_depth and content.strip()):
+            paragraph, list_indent, quote_depth = False, 0, depth
         thematic = THEMATIC.fullmatch(content)
         marker = None if thematic else LIST_MARKER.match(content)
         if marker and not (fence or raw is not None):
