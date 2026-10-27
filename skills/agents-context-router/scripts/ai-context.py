@@ -32,7 +32,7 @@ FENCE = re.compile(r'^\s{0,3}(`{3,}|~{3,})')
 LINK_FENCE = re.compile(r'^ {0,3}(`{3,}|~{3,})')
 BLOCK_HTML = re.compile(r'^ {0,3}</?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:\s|/?>|$)', re.I)
 THEMATIC = re.compile(r' {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})')
-LIST_MARKER = re.compile(r'^ {0,3}(?:[-+*]|\d+[.)])[ \t]+')
+LIST_MARKER = re.compile(r'^ {0,3}(?:[-+*]|\d+[.)])(?:[ \t]+|$)')
 BLOCK_HEADING = re.compile(r'^ {0,3}#{1,6}(?:[ \t]|$)')
 TITLE = r'(?:"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|\((?:\\.|[^)\\])*\))'
 HTML_ATTRIBUTE = r"[A-Za-z_:][A-Za-z0-9_.:-]*(?:[ \t\r\n]*=[ \t\r\n]*(?:[^ \t\r\n\"'=<>`]+|'[^']*'|\"[^\"]*\"))?"
@@ -202,7 +202,7 @@ def list_padding(content, marker, base=0):
     start = re.match(r'^ {0,3}(?:[-+*]|\d+[.)])', content).end()
     padding, columns = indent_prefix(content[start:marker.end()], start=base + start)
     if columns <= 4:
-        return marker.end(), base + start + columns, base + start + columns, 0
+        return marker.end(), base + start + max(columns, 1), base + start + columns, 0
     first_columns = indent_prefix(content[start:start + 1], start=base + start)[1]
     return start + 1, base + start + 1, base + start + first_columns, first_columns - 1
 

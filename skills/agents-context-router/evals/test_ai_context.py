@@ -457,6 +457,20 @@ class LinkCheckTests(unittest.TestCase):
         self.assertEqual(self.problems('[x](\n\nmissing.md)\n[id]:\n\nmissing.md'), [])
 
     def test_context_masks_examples_but_keeps_live_continuations(self):
+        for first, sibling in [('+', '+'), ('*', '*'), ('1.', '1.'), ('1.', '2.')]:
+            for padding in ['', ' ']:
+                with self.subTest(first=first, sibling=sibling, padding=padding):
+                    text = first + ' [x\n' + sibling + padding + '\ny](target.txt)\n\n[live](missing.md)'
+                    errors = self.problems(text)
+                    self.assertEqual(len(errors), 1, errors)
+                    self.assertIn('missing.md', errors[0])
+                    text = 'See [x\n' + sibling + padding + '\ny](target.txt)'
+                    self.write('wiki/target.txt', '')
+                    self.assertEqual(self.problems(text), [])
+                    (self.root / 'wiki/target.txt').unlink()
+                    self.assertEqual(len(self.problems(text)), 1, text)
+                    block = first + '\n' + ' ' * (len(first) + 1) + '[live](target.txt)'
+                    self.assertEqual(len(self.problems(block)), 1, block)
         for start in [0, 1, 2, 10]:
             for quote in ['', '> ']:
                 text = quote + 'See [the\n' + quote + str(start) + '. guide](target.txt)'
