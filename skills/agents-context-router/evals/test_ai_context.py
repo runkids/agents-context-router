@@ -549,6 +549,18 @@ class LinkCheckTests(unittest.TestCase):
         self.assertEqual(self.problems('[x](https&#58;//example.test) [x](&#47;absolute)'), [])
 
     def test_lexical_aliases_keep_distinct_link_bases(self):
+        self.write('docs/guides/page.md', '[x](../target.md)')
+        (self.root / 'wiki/guides').symlink_to(self.root / 'docs/guides', target_is_directory=True)
+        self.write('wiki/target.md', '')
+        self.assertEqual(self.problems('hello'), [])
+        (self.root / 'wiki/target.md').unlink()
+        self.write('docs/target.md', '')
+        errors = self.problems('hello')
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn('wiki/guides/page.md:1:', errors[0])
+        (self.root / 'wiki/guides').unlink()
+        (self.root / 'docs/guides/page.md').unlink()
+        (self.root / 'docs/target.md').unlink()
         self.write('docs/page.md', '[x](target.txt)')
         self.write('wiki/target.txt', '')
         (self.root / 'wiki/alias.md').symlink_to(self.root / 'docs/page.md')
@@ -736,17 +748,36 @@ class LinkCheckTests(unittest.TestCase):
         def checked_open(path, *args, **kwargs):
             self.assertNotEqual(Path(path).resolve(), external)
             return real_open(path, *args, **kwargs)
-        for kind in ['missing', 'directory', 'external']:
+        self.save_cfg()
+        for kind in ['missing', 'directory', 'external', 'invalid_utf8']:
             if kind == 'directory':
                 index.mkdir()
             elif kind == 'external':
                 index.symlink_to(external)
+            elif kind == 'invalid_utf8':
+                index.write_bytes(b'\xff')
             with self.subTest(router=kind), patch('builtins.open', side_effect=checked_open):
                 errors = self.problems('hello')
                 self.assertTrue(any('docs/index.md:' in error for error in errors), errors)
+                from contextlib import redirect_stdout
+                from io import StringIO
+                old_root, output = router.ROOT, StringIO()
+                try:
+                    router.ROOT = str(self.root)
+                    with redirect_stdout(output):
+                        status = router.check(self.cfg)
+                finally:
+                    router.ROOT = old_root
+                self.assertEqual(status, 1, output.getvalue())
+                self.assertIn('docs/index.md:', output.getvalue())
+                self.assertIn('guide ', output.getvalue())
+                result = self.cli('check')
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertNotIn('Traceback', result.stderr)
+                self.assertIn('docs/index.md:', result.stdout)
             if kind == 'directory':
                 index.rmdir()
-            elif kind == 'external':
+            elif kind in ['external', 'invalid_utf8']:
                 index.unlink()
         self.write('docs/index.md', '[live](missing.md)')
         self.assertTrue(any('docs/index.md:1:' in e for e in self.problems('hello')))

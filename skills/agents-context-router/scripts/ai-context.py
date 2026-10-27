@@ -108,7 +108,10 @@ def orphans(cfg, reference_text=''):
     root_file = cfg.get('rootInstructions', 'AGENTS.md')
     routed = {s['path'].replace('\\', '/') for t in cfg['topics'].values() for s in t['sources']}
     allowed = {p.replace('\\', '/'): reason for p, reason in cfg.get('unrouted', {}).items()}
-    router_text = open(os.path.join(ROOT, router), encoding='utf-8').read() if os.path.exists(os.path.join(ROOT, router)) else ''
+    try:
+        router_text = section({'path': router})
+    except (ValueError, OSError):
+        router_text = ''  # link_problems reports the invalid or unreadable router.
     reference_text += '\n' + router_text
     bad = []
     skip = {'.git', 'node_modules', 'dist', 'build', 'vendor', '.venv', 'target'}
@@ -552,7 +555,7 @@ def link_problems(cfg):
             if not dest:
                 continue
             try:
-                target = os.path.realpath(os.path.join(os.path.dirname(path), dest))
+                target = os.path.realpath(os.path.normpath(os.path.join(os.path.dirname(path), dest)))
             except (OSError, ValueError):
                 target = ''
             if not target.startswith(ROOT + os.sep) or not os.path.isfile(target):
