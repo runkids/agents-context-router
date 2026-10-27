@@ -30,6 +30,7 @@ CFG_PATH = os.path.realpath(os.environ.get('AI_CONTEXT_CONFIG') or os.path.join(
 HEAD = re.compile(r'^(#{1,6})\s+(.+?)\s*#*\s*$')
 FENCE = re.compile(r'^\s{0,3}(`{3,}|~{3,})')
 TITLE = r'(?:"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|\((?:\\.|[^)\\])*\))'
+HTML_TAG = re.compile(r"</?[A-Za-z][A-Za-z0-9-]*(?:\s+(?:[^<>\"']|\"[^\"]*\"|'[^']*')*)?\s*/?>")
 
 
 def load_cfg():
@@ -184,6 +185,9 @@ def markdown_text(lines):
         quote = re.match(r'^(?: {0,3}>[ \t]?)+', ln)
         prefix = quote.end() if quote else 0
         depth = ln[:prefix].count('>')
+        if (fence or raw is not None) and depth >= owner[0]:
+            quote = re.match(r'^(?: {0,3}>[ \t]?){' + str(owner[0]) + '}', ln)
+            prefix, depth = quote.end(), owner[0]
         content = ln[prefix:]
         indentation = len(content) - len(content.lstrip(' '))
         if (fence or raw is not None) and (depth < owner[0] or
@@ -192,7 +196,8 @@ def markdown_text(lines):
         if depth != quote_depth:
             paragraph, list_indent = False, 0
         quote_depth = depth
-        marker = re.match(r'^ {0,3}(?:[-+*]|\d+[.)])[ \t]+', content)
+        thematic = re.fullmatch(r' {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})', content)
+        marker = None if thematic else re.match(r'^ {0,3}(?:[-+*]|\d+[.)])[ \t]+', content)
         if marker and not (fence or raw is not None):
             list_indent = len(marker.group().expandtabs(4))
             prefix += marker.end()
@@ -215,7 +220,7 @@ def markdown_text(lines):
             continue
         if raw is not None:
             result.append(blank(ln))
-            if (not raw and not content.strip()) or (raw and re.search(r'</' + raw + r'\s*>', content, re.I)):
+            if (not raw and not content.strip()) or (raw and re.search(raw, content, re.I)):
                 raw = None
             continue
         if indent >= 4 and not paragraph and not comment:
@@ -243,13 +248,21 @@ def markdown_text(lines):
             result.append(blank(ln))
             paragraph = False
         elif html:
-            raw = html[1].lower()
+            raw = r'</' + html[1] + r'\s*>'
             owner = (depth, list_indent)
-            if re.search(r'</' + raw + r'\s*>', content, re.I):
+            if re.search(raw, content, re.I):
                 raw = None
             result.append(blank(ln))
             paragraph = False
-        elif re.match(r'^ {0,3}</?(?:address|article|aside|blockquote|details|div|dl|fieldset|figure|footer|form|h[1-6]|header|hr|li|main|nav|ol|p|section|table|tbody|td|th|thead|tr|ul)(?:\s|/?>|$)', content, re.I):
+        elif re.match(r'^ {0,3}(?:<\?|<![A-Z]|<!\[CDATA\[)', content):
+            raw = r'\?>' if content.lstrip().startswith('<?') else (r'\]\]>' if '<![CDATA[' in content else '>')
+            owner = (depth, list_indent)
+            if re.search(raw, content):
+                raw = None
+            result.append(blank(ln))
+            paragraph = False
+        elif (re.match(r'^ {0,3}</?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:\s|/?>|$)', content, re.I)
+              or (not paragraph and HTML_TAG.fullmatch(content.strip()))):
             raw = ''  # Ordinary HTML blocks end at a blank line.
             owner = (depth, list_indent)
             result.append(blank(ln))
@@ -274,7 +287,9 @@ def markdown_text(lines):
                     result.append(blank(ln))
                     continue
             result.append(' ' * prefix + content)
-            paragraph = bool(content.strip()) and not HEAD.match(content)
+            boundary = (thematic or re.match(r'^ {0,3}#{1,6}(?:[ \t]|$)', content) or
+                        (paragraph and re.fullmatch(r' {0,3}(?:=+|-+)[ \t]*', content)))
+            paragraph = bool(content.strip()) and not boundary
     text = '\n'.join(result)
     return code.sub(lambda m: blank(m.group()) if m[1] else m.group(), text), definitions
 
@@ -282,18 +297,17 @@ def markdown_text(lines):
 def link_destinations(lines):
     """Yield original line and destination for inline links and used definitions."""
     text, collected = markdown_text(lines)
-    normalize = lambda value: ' '.join(markdown_unescape(value).split()).casefold()
+    normalize = lambda value: re.sub(r'[ \t\r\n]+', ' ', value.strip(' \t\r\n')).casefold()
     definitions, used = {}, set()
     for label, line, dest in collected:
         definitions.setdefault(normalize(label), (line, dest))
     # Pair brackets with a stack so nested labels require no recursive parser.
-    html_token = re.compile(r"</?[A-Za-z][A-Za-z0-9-]*(?:\s+(?:[^<>\"']|\"[^\"]*\"|'[^']*')*)?\s*/?>")
     pairs, stack, pos = {}, [], 0
     while pos < len(text):
         if text[pos] == '\\':
             pos += 2
             continue
-        if text[pos] == '<' and (token := html_token.match(text, pos)):
+        if text[pos] == '<' and (token := HTML_TAG.match(text, pos)):
             pos = token.end()
             continue
         if text[pos] == '[':
@@ -306,7 +320,7 @@ def link_destinations(lines):
         if start < consumed or any(a <= start < b for a, b in destination_ranges):
             continue
         label, end = text[start + 1:close], close + 1
-        if not label or re.search(r'\n[ \t]*\n', label):
+        if re.search(r'\n[ \t]*\n', label):
             continue
         if text[end:end + 1] == '(':
             found = destination(text, end + 1)
@@ -319,6 +333,8 @@ def link_destinations(lines):
                     linked_labels.append((start, close))
                     continue
         if text[start - 1:start] != '!' and any(a < start < b for a, b in linked_labels):
+            continue
+        if not label:
             continue
         reference = pairs.get(end)
         if reference is not None:
@@ -334,8 +350,11 @@ def link_destinations(lines):
 def link_problems(cfg):
     """Check local file links in whole routed sources and wiki Markdown pages."""
     paths = {s['path'].replace('\\', '/') for t in cfg['topics'].values() for s in t['sources']}
+    sources = {os.path.abspath(os.path.join(ROOT, p)) for p in paths}
     wiki = cfg.get('wikiDir', 'wiki')
     paths.add(cfg.get('routerFile', f'{wiki}/README.md'))
+    paths = {os.path.abspath(os.path.join(ROOT, p)) for p in paths}
+    wiki_paths, bad = set(), []
     pending = [(os.path.join(ROOT, wiki), frozenset())]
     while pending:
         directory, ancestors = pending.pop()
@@ -348,15 +367,16 @@ def link_problems(cfg):
                     if entry.is_dir():
                         pending.append((entry.path, ancestors | {canonical}))
                     elif entry.name.endswith('.md'):
-                        paths.add(os.path.relpath(entry.path, ROOT))
-        except OSError:
-            continue
-    bad = []
-    for path in sorted({os.path.abspath(os.path.join(ROOT, p)) for p in paths}):
+                        wiki_paths.add(os.path.abspath(entry.path))
+        except OSError as error:
+            bad.append(f'{os.path.relpath(directory, ROOT)}: cannot scan wiki directory: {error}')
+    for path in sorted(paths | wiki_paths):
         rel = os.path.relpath(path, ROOT)
         canonical = os.path.realpath(path)
         if not canonical.startswith(ROOT + os.sep) or not os.path.isfile(path):
-            continue  # Rendering retains ownership of invalid source diagnostics.
+            if path in wiki_paths and path not in sources:
+                bad.append(f'{rel}: wiki page is not a file inside repo')
+            continue  # Rendering retains ownership of invalid configured sources.
         try:
             with open(path, encoding='utf-8') as source:
                 lines = source.read().split('\n')

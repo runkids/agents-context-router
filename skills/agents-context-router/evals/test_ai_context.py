@@ -295,7 +295,7 @@ class LinkCheckTests(unittest.TestCase):
         self.assertEqual(self.problems('[unused]: missing.md\n[undefined]\n'), [])
         self.write('wiki/good.md', '')
         self.assertEqual(self.problems('[id]\n\n[id]: good.md\n[id]: missing.md'), [])
-        self.assertEqual(len(self.problems(r'[a\*b]' + '\n\n[a*b]: missing.md')), 1)
+        self.assertEqual(len(self.problems(r'[a\*b]' + '\n\n[a*b]: missing.md')), 0)
 
     def test_code_escapes_and_original_lines(self):
         text = ('```md\n[x](missing.md)\n```\n~~~\n[id]\n~~~\n'
@@ -567,6 +567,87 @@ class LinkCheckTests(unittest.TestCase):
                 errors = self.problems('[x](missing.md)')
             self.assertTrue(any('wiki/' + denied + ':' in e and 'denied for test' in e for e in errors))
             self.assertTrue(any(live in e for e in errors))
+
+    def test_empty_inline_labels_through_cli(self):
+        for label in ['[]', '![]']:
+            self.write('wiki/guide.md', '# Selected\n' + label + '(target.txt)')
+            for exists in [True, False, True]:
+                if exists:
+                    self.write('wiki/target.txt', '')
+                else:
+                    (self.root / 'wiki/target.txt').unlink()
+                result = self.cli('check')
+                self.assertEqual(result.returncode, 0 if exists else 1, result.stdout)
+                if not exists:
+                    self.assertIn('wiki/guide.md:2:', result.stdout)
+
+    def test_definitions_after_heading_and_rule_boundaries(self):
+        boundaries = ['Title\n=====', 'Title\n---', '---', '***', '_ _ _', '* * *',
+                      '  # Heading', '#', '```\ncode\n```', '    code\n',
+                      '<div>\nbody\n</div>\n', '> quote\n']
+        for boundary in boundaries:
+            with self.subTest(boundary=boundary):
+                text = boundary + '\n[id]: target.txt\n\n[id]'
+                self.write('wiki/target.txt', '')
+                self.assertEqual(self.problems(text), [])
+                (self.root / 'wiki/target.txt').unlink()
+                self.assertEqual(len(self.problems(text)), 1)
+
+    def test_raw_html_forms_and_live_text_after_blank(self):
+        forms = ['<custom>\n[x](missing.md)\n</custom>',
+                 '<custom attr="value">\n[x](missing.md)', '</custom>\n[x](missing.md)',
+                 '<?processing\n[x](missing.md)\n?>', '<!DOCTYPE\n[x](missing.md)\n>',
+                 '<![CDATA[\n[x](missing.md)\n]]>', '<!--\n[x](missing.md)\n-->',
+                 '<style>\n[x](missing.md)\n</style>', '<textarea>\n[x](missing.md)\n</textarea>',
+                 '<table>\n[x](missing.md)\n</table>', '<figure>\n[x](missing.md)\n</figure>']
+        for form in forms:
+            with self.subTest(form=form):
+                self.assertEqual(self.problems('\n' + form), [])
+                errors = self.problems('\n' + form + '\n\n[live](missing.md)')
+                self.assertEqual(len(errors), 1, errors)
+                self.assertIn('wiki/guide.md:' + str(form.count('\n') + 5) + ':', errors[0])
+        self.assertEqual(len(self.problems('paragraph\n<custom>\n[live](missing.md)')), 1)
+        self.assertEqual(self.problems('```\n<custom>\n```'), [])
+        self.assertEqual(len(self.problems('    <custom>\n\n[live](missing.md)')), 1)
+
+    def test_wiki_inventory_failures_report_without_external_reads(self):
+        from unittest.mock import patch
+        self.write('wiki/private/page.md', '[x](missing.md)')
+        real_scandir = router.os.scandir
+        def deny(directory):
+            if str(directory).endswith('private'):
+                raise PermissionError('directory denied for test')
+            return real_scandir(directory)
+        with patch.object(router.os, 'scandir', side_effect=deny):
+            errors = self.problems('[live](missing.md)')
+        self.assertTrue(any('wiki/private:' in e and 'directory denied' in e for e in errors))
+        self.assertTrue(any('wiki/guide.md:2:' in e for e in errors))
+
+    def test_invalid_wiki_symlinks_fail_without_reading_external_content(self):
+        from unittest.mock import patch
+        outside = self.root.parent / 'outside.md'
+        outside.write_text('[x](missing.md)', encoding='utf-8')
+        (self.root / 'wiki/external.md').symlink_to(outside)
+        (self.root / 'wiki/dangling.md').symlink_to(self.root / 'absent.md')
+        (self.root / 'wiki/README.md').unlink()
+        (self.root / 'wiki/README.md').symlink_to(self.root / 'absent.md')
+        real_open = open
+        def deny_external(path, *args, **kwargs):
+            self.assertNotEqual(Path(path).resolve(), outside)
+            return real_open(path, *args, **kwargs)
+        with patch('builtins.open', side_effect=deny_external):
+            errors = self.problems('hello')
+        self.assertTrue(any('wiki/external.md:' in e for e in errors))
+        self.assertTrue(any('wiki/dangling.md:' in e for e in errors))
+        self.assertTrue(any('wiki/README.md:' in e for e in errors))
+
+    def test_reference_labels_compare_raw_markdown_whitespace_only(self):
+        for label, use, matches in [(r'foo\!', 'foo!', False), (r'foo\!', r'foo\!', True),
+                                    ('a&amp;b', 'a&b', False), ('a&amp;b', 'a&amp;b', True),
+                                    ('a\u00a0b', 'a b', False), ('A\t B', 'a b', True)]:
+            with self.subTest(label=label, use=use):
+                errors = self.problems('[' + label + ']: missing.md\n\n[' + use + ']')
+                self.assertEqual(len(errors), int(matches))
 
     def test_shipped_artifacts_match_distributable_assets(self):
         base = SCRIPT.parents[1]
