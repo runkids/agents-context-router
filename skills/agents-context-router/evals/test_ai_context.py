@@ -1,21 +1,27 @@
-"""CLI regressions using the installed script layout, without external dependencies."""
+"""Combined CLI regressions for indexing, shared installs, and relative links."""
 from contextlib import redirect_stdout
+import importlib.util
 import io
-import runpy
-from unittest.mock import patch
+import itertools
 import json
 import os
 from pathlib import Path
+import runpy
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+from urllib.parse import quote
 
 
 SKILL = Path(__file__).resolve().parents[1]
 SCRIPT = SKILL / 'scripts/ai-context.py'
 PAGE = 'projects/api/deploy-runbook.md'
+spec = importlib.util.spec_from_file_location('ai_context', SCRIPT)
+router = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(router)
 
 
 class CheckTests(unittest.TestCase):
@@ -220,6 +226,160 @@ class CheckTests(unittest.TestCase):
         self.assertEqual(result.stderr, '')
 
 
+class LinkCheckTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name).resolve() / 'repo'
+        self.root.mkdir()
+        self.write('scripts/ai-context.py', SCRIPT.read_text(encoding='utf-8'))
+        self.write('AGENTS.md', '`guide`\n')
+        self.write('wiki/README.md', 'history/log.md\n')
+        self.cfg = {'topics': {'guide': {'description': 'Guide', 'sources': [
+            {'path': 'wiki/guide.md', 'heading': 'Selected'}]}}}
+        self.write('wiki/guide.md', '# Selected\nHello\n')
+        self.save_cfg()
+
+    def write(self, name, text):
+        path = self.root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding='utf-8')
+
+    def save_cfg(self):
+        self.write('wiki/ai-context.json', json.dumps(self.cfg))
+
+    def cli(self, *args):
+        env = {k: v for k, v in os.environ.items()
+               if k not in ('AI_CONTEXT_ROOT', 'AI_CONTEXT_CONFIG')}
+        return subprocess.run([sys.executable, str(self.root / 'scripts/ai-context.py'),
+                               *args], env=env, capture_output=True, text=True)
+
+    def problems(self, text):
+        self.write('wiki/guide.md', '# Selected\n' + text)
+        old_root = router.ROOT
+        try:
+            router.ROOT = str(self.root)
+            return router.link_problems(self.cfg)
+        finally:
+            router.ROOT = old_root
+
+    def test_cli_missing_link_outside_selected_heading(self):
+        self.write('wiki/guide.md', '# Selected\nHello\n# Other\n[Retry](../notes/renamed.md)\n')
+        result = self.cli('check')
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('wiki/guide.md:4:', result.stdout)
+        self.assertIn('../notes/renamed.md', result.stdout)
+        self.assertEqual(self.cli('guide').stdout,
+                         '<!-- wiki/guide.md § Selected -->\n# Selected\nHello\n')
+
+    def test_inline_destinations_and_titles(self):
+        self.write('wiki/a(b).md', '')
+        self.write('wiki/space name.md', '')
+        for destination in ['a(b).md', r'a\(b\).md', '<space name.md>',
+                            'a(b).md "title"', "a(b).md 'title'", 'a(b).md (title)']:
+            for mark in ['[link]', '![image]']:
+                with self.subTest(destination=destination, mark=mark):
+                    self.assertEqual(self.problems(mark + '(' + destination + ')'), [])
+        self.assertEqual(len(self.problems('[label](missing(a).md "title")')), 1)
+        self.assertEqual(len(self.problems('![label](<missing file.png>)')), 1)
+
+    def test_used_references_report_definition_once(self):
+        text = '[Full][ Some ID ]\n![Some ID][]\n[Some ID]\n\n[some id]: <missing file.md> "title"\n'
+        errors = self.problems(text)
+        self.assertEqual(len(errors), 1)
+        self.assertIn('wiki/guide.md:6:', errors[0])
+        self.assertIn('missing file.md', errors[0])
+        for usage in ['[x][id]', '[id][]', '[id]', '![id]']:
+            with self.subTest(usage=usage):
+                self.assertEqual(len(self.problems('[id]: missing.md\n' + usage)), 1)
+        self.assertEqual(self.problems('[unused]: missing.md\n[undefined]\n'), [])
+        self.write('wiki/good.md', '')
+        self.assertEqual(self.problems('[id]\n[id]: good.md\n[id]: missing.md'), [])
+
+    def test_code_escapes_and_original_lines(self):
+        text = ('```md\n[x](missing.md)\n```\n~~~\n[id]\n~~~\n'
+                '`[x](missing.md)` and `` `[id]` ``\n'
+                r'\[x](missing.md)' + '\n' + r'\![x](missing.md)' + '\n'
+                '[unused]: missing.md\n[id]: missing.md\n[live](missing.md)\n')
+        errors = self.problems(text)
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn('wiki/guide.md:13:', errors[0])
+        self.assertEqual(self.problems('`example\n[x](missing.md)\n`'), [])
+        self.assertEqual(len(self.problems('` unmatched [x](missing.md)')), 1)
+        self.assertEqual(len(self.problems(r'\` [x](missing.md) `')), 1)
+
+    def test_exclusions_and_url_decoding(self):
+        for target in ['https://example.test/a', 'mailto:a@b.test', 'custom:thing',
+                       '//example.test/a', '/absolute/path', '#heading', '?query', '']:
+            with self.subTest(target=target):
+                self.assertEqual(self.problems('[x](' + target + ')'), [])
+        self.write('wiki/space #中文.md', '')
+        self.assertEqual(self.problems('[x](space%20%23%E4%B8%AD%E6%96%87.md?q#h)'), [])
+        self.assertEqual(len(self.problems('[x](missing.md?query#heading)')), 1)
+        self.write('wiki/existing.md', '')
+        self.assertEqual(self.problems('[x](existing.md#no-such-heading)'), [])
+
+    def test_containment_and_file_targets(self):
+        outside = self.root.parent / 'repo-lookalike'
+        outside.mkdir()
+        (outside / 'file.md').write_text('outside', encoding='utf-8')
+        (self.root / 'wiki' / 'escape').symlink_to(outside, target_is_directory=True)
+        self.write('inside.md', '')
+        (self.root / 'wiki' / 'inside.md').symlink_to(self.root / 'inside.md')
+        self.assertEqual(self.problems('[x](../inside.md) [x](inside.md)'), [])
+        for target in ['../wiki', '..', '../../repo-lookalike/file.md',
+                       '%2e%2e/%2e%2e/repo-lookalike/file.md', 'escape/file.md', '%00.md']:
+            with self.subTest(target=target):
+                self.assertEqual(len(self.problems('[x](' + target + ')')), 1)
+
+    def test_inventory_deduplicates_and_includes_unrouted_history_router(self):
+        self.cfg['topics']['guide']['sources'].append({'path': 'wiki/guide.md'})
+        self.cfg['unrouted'] = {'wiki/extra.md': 'human only'}
+        self.write('wiki/extra.md', '[x](missing.md)')
+        self.write('wiki/history/log.md', '[x](missing.md)')
+        self.write('wiki/README.md', 'history/log.md\n[x](missing.md)')
+        errors = self.problems('[x](missing.md)')
+        self.assertEqual(len(errors), 4, errors)
+        self.assertEqual({e.split(':')[0] for e in errors},
+                         {'wiki/guide.md', 'wiki/extra.md', 'wiki/history/log.md', 'wiki/README.md'})
+        self.cfg.update(wikiDir='docs', routerFile='INDEX.md')
+        self.cfg['topics']['guide']['sources'] = [{'path': 'notes/source.txt'}]
+        self.write('notes/source.txt', '[x](missing.md)')
+        self.write('docs/extra.md', '[x](missing.md)')
+        self.write('INDEX.md', '[x](missing.md)')
+        errors = self.problems('hello')
+        self.assertEqual({e.split(':')[0] for e in errors},
+                         {'notes/source.txt', 'docs/extra.md', 'INDEX.md'})
+
+    def test_bounded_generated_filenames_existing_then_missing(self):
+        # Exhaustive small alphabet; failures stay reproducible as individual subtests.
+        for parts in itertools.product(['a', ' ', '#', '中', '(', ')'], repeat=2):
+            name = ''.join(parts) + '.md'
+            target = self.root / 'wiki' / name
+            target.write_text('', encoding='utf-8')
+            text = '[generated](' + quote(name, safe='') + ')'
+            with self.subTest(name=name):
+                self.assertEqual(self.problems(text), [])
+                target.unlink()
+                errors = self.problems(text)
+                self.assertEqual(len(errors), 1)
+                self.assertIn('wiki/guide.md:2:', errors[0])
+                self.assertIn(quote(name, safe=''), errors[0])
+
+    def test_exact_headings_keep_existing_fence_behavior(self):
+        self.write('wiki/guide.md', '# Selected\n```sh\n# Selected\n````\n~~~\n# Other\n~~~\nbody\n# End\n')
+        result = self.cli('guide')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('body', result.stdout)
+        self.assertNotIn('# End', result.stdout)
+        self.write('wiki/guide.md', '# Selected\n# Selected\n')
+        result = self.cli('check')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("heading 'Selected' found 2x", result.stdout)
+
+
+
+
 class RouterTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -228,6 +388,7 @@ class RouterTests(unittest.TestCase):
         self.root = self.cwd / 'repo'
         self.write('AGENTS.md', '`guide`\n')
         self.write('wiki/guide.md', '# Guide\nRoot content.\n')
+        self.write('wiki/README.md', '')
         self.cfg = {'topics': {'guide': {'description': 'Read the guide.',
                                        'sources': [{'path': 'wiki/guide.md'}]}}}
         self.save_config()
@@ -343,11 +504,14 @@ class RouterTests(unittest.TestCase):
                 (self.root / path).unlink()
 
     def test_filesystem_anchor_allows_temporary_sources(self):
+        self.write('wiki/guide.md', '# Guide\nRoot content.\n[Target](target.txt)\n')
+        self.write('wiki/target.txt', 'Inside the selected filesystem root.\n')
         anchor = Path(self.root.anchor)
         source = (self.root / 'wiki' / 'guide.md').relative_to(anchor).as_posix()
         self.cfg['topics']['guide']['sources'] = [{'path': source}]
         self.cfg['rootInstructions'] = str(self.root / 'AGENTS.md')
         self.cfg['routerFile'] = str(self.root / 'wiki' / 'README.md')
+        self.cfg['wikiDir'] = str(self.root / 'wiki')
         external = self.save_config(self.cwd / 'router.json')
         overrides = {'AI_CONTEXT_ROOT': str(anchor), 'AI_CONTEXT_CONFIG': str(external)}
         with self.subTest(command='guide'):

@@ -7,8 +7,8 @@ Topics live in wiki/ai-context.json. A source is a whole file or one exact
 heading (the section runs to the next heading of the same or higher level).
 check also fails on orphans, so docs cannot silently drift out of the router:
 wiki pages no topic loads, history files missing from the router index, and
-nested AGENTS.md files no topic loads, and opted-in indexed pages no instructions name.
-List deliberate exceptions under
+nested AGENTS.md files no topic loads, opted-in indexed pages no instructions name, and relative Markdown links are checked.
+List deliberate routing exceptions under
 "unrouted" in the config as exact paths or case-sensitive fnmatch globs,
 each with a reason. Keys match themselves and other names via fnmatch, regardless
 of existence; use wiki/file[[]1].md to exempt the literal wiki/file[1].md
@@ -22,6 +22,7 @@ Empty or unset overrides use the defaults.
 No dependencies beyond the Python 3.8+ standard library.
 """
 import fnmatch, json, os, re, sys
+from urllib.parse import unquote
 
 ROOT = os.path.realpath(os.environ.get('AI_CONTEXT_ROOT') or os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CFG_PATH = os.path.realpath(os.environ.get('AI_CONTEXT_CONFIG') or os.path.join(ROOT, 'wiki', 'ai-context.json'))
@@ -36,8 +37,8 @@ def load_cfg():
         return json.load(f)
 
 
-def headings(lines):
-    """Yield (index, level, text), skipping headings inside fenced code (e.g. shell comments)."""
+def unfenced(lines):
+    """Yield original indexes and lines outside fenced code."""
     fence = None
     for i, ln in enumerate(lines):
         m = FENCE.match(ln)
@@ -48,7 +49,14 @@ def headings(lines):
             elif mark.startswith(fence):
                 fence = None
             continue
-        if fence is None and (h := HEAD.match(ln)):
+        if fence is None:
+            yield i, ln
+
+
+def headings(lines):
+    """Yield (index, level, text), skipping fenced code (e.g. shell comments)."""
+    for i, ln in unfenced(lines):
+        if h := HEAD.match(ln):
             yield i, len(h.group(1)), h.group(2)
 
 
@@ -118,8 +126,122 @@ def orphans(cfg, reference_text=''):
     return bad
 
 
+def destination(text, start):
+    """Read an angle-wrapped or balanced bare Markdown destination."""
+    start += len(text[start:]) - len(text[start:].lstrip())
+    angle = text[start:start + 1] == '<'
+    pos, depth = start + angle, 0
+    begin = pos
+    while pos < len(text):
+        char = text[pos]
+        if char == '\\' and pos + 1 < len(text):
+            pos += 2
+            continue
+        if angle:
+            if char == '>':
+                return text[begin:pos], pos + 1
+            if char == '\n':
+                break
+        else:
+            if char.isspace() or (char == ')' and depth == 0):
+                return text[begin:pos], pos
+            if char == '(':
+                depth += 1
+            elif char == ')':
+                depth -= 1
+        pos += 1
+    if not angle and depth == 0:
+        return text[begin:pos], pos
+    return None
+
+
+def link_destinations(lines):
+    """Yield original line and destination for inline links and used definitions."""
+    visible = {i for i, _ in unfenced(lines)}
+    text = '\n'.join(ln if i in visible else '' for i, ln in enumerate(lines))
+    # Mask code spans, retaining their newlines and all original source offsets.
+    code = re.compile(r'\\[^\n]|(`+)(?!`)([\s\S]*?)(?<!`)\1(?!`)')
+    text = code.sub(lambda m: re.sub(r'[^\n]', ' ', m.group()) if m[1] else m.group(), text)
+    label = re.compile(r'\[((?:\\.|[^\[\]\\])+)\]')
+    normalize = lambda value: ' '.join(re.sub(r'\\([!"#$%&\'()*+,\-./:;<=>?@\[\]\\^_`{|}~])', r'\1', value).split()).casefold()
+    definitions, used = {}, set()
+    for line, ln in enumerate(text.split('\n'), 1):
+        match = re.match(r'^ {0,3}\[((?:\\.|[^\]\\])+)\]:\s*', ln)
+        if match:
+            found = destination(ln, match.end())
+            if found:
+                definitions.setdefault(normalize(match[1]), (line, found[0]))
+            continue
+        pos = 0
+        while pos < len(ln):
+            if ln[pos] == '\\':
+                # Escaped link/image markup is an example, not a destination.
+                escaped = label.match(ln, pos + 1 + (ln[pos + 1:pos + 2] == '!'))
+                pos = escaped.end() if escaped else pos + 2
+                continue
+            match = label.match(ln, pos)
+            if not match:
+                pos += 1
+                continue
+            end = match.end()
+            if ln[end:end + 1] == '(':
+                found = destination(ln, end + 1)
+                if found:
+                    tail = re.match(r'\s*(?:"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|\((?:\\.|[^)\\])*\))?\s*\)', ln[found[1]:])
+                    if tail:
+                        yield line, found[0]
+                        pos = found[1] + tail.end()
+                        continue
+            reference = label.match(ln, end)
+            if reference:
+                used.add(normalize(reference[1]))
+                end = reference.end()
+            else:
+                used.add(normalize(match[1]))
+                if ln[end:end + 2] == '[]':
+                    end += 2
+            pos = end
+    for name, value in definitions.items():
+        if name in used:
+            yield value
+
+
+def link_problems(cfg):
+    """Check local file links in whole routed sources and wiki Markdown pages."""
+    paths = {s['path'].replace('\\', '/') for t in cfg['topics'].values() for s in t['sources']}
+    wiki = cfg.get('wikiDir', 'wiki')
+    paths.add(cfg.get('routerFile', f'{wiki}/README.md'))
+    skip = {'.git', 'node_modules', 'dist', 'build', 'vendor', '.venv', 'target'}
+    for directory, dirs, files in os.walk(os.path.join(ROOT, wiki)):
+        dirs[:] = [d for d in dirs if d not in skip and not d.startswith('.')]
+        paths.update(os.path.relpath(os.path.join(directory, f), ROOT)
+                     for f in files if f.endswith('.md'))
+    bad, seen = [], set()
+    for rel in sorted(paths):
+        path = os.path.realpath(os.path.join(ROOT, rel))
+        if path in seen or not path.startswith(ROOT + os.sep) or not os.path.isfile(path):
+            continue  # Rendering retains ownership of invalid source diagnostics.
+        seen.add(path)
+        with open(path, encoding='utf-8') as source:
+            lines = source.read().split('\n')
+        for line, raw in link_destinations(lines):
+            dest = re.sub(r'\\([!"#$%&\'()*+,\-./:;<=>?@\[\]\\^_`{|}~])', r'\1', raw)
+            if re.match(r'^[A-Za-z][A-Za-z0-9+.-]*:', dest) or dest.startswith(('/', '\\', '#', '?')):
+                continue
+            dest = unquote(re.split(r'[?#]', dest, maxsplit=1)[0])
+            if not dest:
+                continue
+            try:
+                target = os.path.realpath(os.path.join(os.path.dirname(path), dest))
+            except (OSError, ValueError):
+                target = ''
+            if not target.startswith(ROOT + os.sep) or not os.path.isfile(target):
+                bad.append(f'{rel}:{line}: relative link {raw!r} is not a file inside repo')
+    return bad
+
+
 def check(cfg):
-    bad = []
+    bad = link_problems(cfg)
     budgets = cfg.get('budgets', {})
     root_file = cfg.get('rootInstructions', 'AGENTS.md')
     root_text = open(os.path.join(ROOT, root_file), encoding='utf-8').read()

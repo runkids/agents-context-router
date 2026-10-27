@@ -47,6 +47,8 @@ Leave volatile state out of the docs: progress counts, who is doing what this we
 ## What check enforces
 
 - Every path stays inside the repo and exists, and every heading matches exactly once.
+- Relative Markdown links and images resolve from their containing page to files inside the repo, including after symlink resolution. This is always checked in complete routed sources and every wiki Markdown page: the router index, history and `"unrouted"` exceptions included.
+- Inline destinations and used reference definitions are checked; reference errors point to the definition line. Unused definitions, fenced/inline code, escaped markup, external URLs, absolute paths and fragment-only links are skipped. Queries and fragments are removed before percent-decoding filenames. Heading fragments are not validated.
 - `AGENTS.md` and every topic stay under their byte budgets. Over budget means split the topic. Do not raise the cap.
 - Every topic is listed in `AGENTS.md`.
 - **No orphans:**

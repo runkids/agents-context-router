@@ -28,7 +28,7 @@ Keep rules that apply to every task in `AGENTS.md`. Move runbooks and reference 
 - Sorts content into a small kernel, task topics, history, and human docs.
 - Routes each topic to whole files or exact Markdown headings through `wiki/ai-context.json`.
 - Bundles `scripts/ai-context.py`, a dependency-free router with `list`, topic, and `check` commands.
-- Checks byte budgets, missing or ambiguous headings, unlisted topics, and orphaned wiki/history files.
+- Checks byte budgets, missing or ambiguous headings, unlisted topics, orphaned wiki/history files, and broken relative Markdown file links.
 - Adds an in-repo maintenance guide so the router can be maintained after the skill is removed.
 
 The default budgets are 8 KiB for the root instructions and 16 KiB per topic. Split an oversized topic instead of raising its limit.
@@ -119,7 +119,7 @@ python3 scripts/ai-context.py debugging
 python3 scripts/ai-context.py check
 ```
 
-`list` shows available topics. A topic command prints only its mapped sections, marked with their source paths. `check` validates the router and its configured limits.
+`list` shows available topics. A topic command prints only its mapped sections, marked with their source paths. `check` validates the router and its configured limits. Relative Markdown links are always checked in complete routed sources and wiki pages, including history and routing exceptions. Destinations resolve from the containing page and must be files inside the repository; heading fragments are not validated.
 
 You can also keep one installed script outside the repository, with no local `scripts/` directory:
 
