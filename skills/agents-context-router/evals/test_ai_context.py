@@ -295,11 +295,12 @@ class LinkCheckTests(unittest.TestCase):
         self.assertEqual(self.problems('[unused]: missing.md\n[undefined]\n'), [])
         self.write('wiki/good.md', '')
         self.assertEqual(self.problems('[id]\n[id]: good.md\n[id]: missing.md'), [])
+        self.assertEqual(len(self.problems(r'[a\*b]' + '\n[a*b]: missing.md')), 1)
 
     def test_code_escapes_and_original_lines(self):
         text = ('```md\n[x](missing.md)\n```\n~~~\n[id]\n~~~\n'
                 '`[x](missing.md)` and `` `[id]` ``\n'
-                r'\[x](missing.md)' + '\n' + r'\![x](missing.md)' + '\n'
+                r'\[x](missing.md)' + '\n' + r'!\[x](missing.md)' + '\n'
                 '[unused]: missing.md\n[id]: missing.md\n[live](missing.md)\n')
         errors = self.problems(text)
         self.assertEqual(len(errors), 1, errors)
@@ -365,6 +366,104 @@ class LinkCheckTests(unittest.TestCase):
                 self.assertEqual(len(errors), 1)
                 self.assertIn('wiki/guide.md:2:', errors[0])
                 self.assertIn(quote(name, safe=''), errors[0])
+
+    def test_nested_and_wrapped_links_restore_then_rename(self):
+        cases = ['[Read **[the guide]**](target.md)', '[guide](\ntarget.md)',
+                 '[multi\nline](target.md\n "title")', '![alt [nested]](<target.md>)',
+                 '[guide](\n<target.md>\n)', '[x][id]\n\n[id]:\n  target.md',
+                 '[x][multi\n id]\n\n[multi id]: target.md "title"']
+        for text in cases:
+            with self.subTest(text=text):
+                self.write('wiki/target.md', '')
+                self.assertEqual(self.problems(text), [])
+                (self.root / 'wiki/target.md').unlink()
+                errors = self.problems(text)
+                self.assertEqual(len(errors), 1, errors)
+                self.assertIn('wiki/guide.md:', errors[0])
+                self.assertIn('target.md', errors[0])
+        self.write('wiki/guide.md', '# Selected\n[Read [nested]](\nmissing.md)')
+        result = self.cli('check')
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn('wiki/guide.md:2:', result.stdout)
+        self.assertEqual(self.problems('[x](\n\nmissing.md)\n[id]:\n\nmissing.md'), [])
+
+    def test_context_masks_examples_but_keeps_live_continuations(self):
+        examples = ['\n    [x](missing.md)', '\n\t[x](missing.md)',
+                    '\n>     [x](missing.md)', '- item\n\n      [x](missing.md)',
+                    '> ```md\n> [x](missing.md)\n> ```',
+                    '- ```md\n  [x](missing.md)\n  ```',
+                    '\n<!--\n```\n[x](missing.md)\n-->\n',
+                    '\n<!--\n```\n-->\n```\n[x](missing.md)\n```\n',
+                    '\n<pre>\n[x](missing.md)\n</pre>\n',
+                    '\n<script>\n[x](missing.md)\n</script>\n',
+                    '\n<div>\n[x](missing.md)\n</div>\n',
+                    '\n    <!--\n\n', '\n    ```\n\n']
+        for example in examples:
+            with self.subTest(example=example):
+                errors = self.problems(example + '\n[live](missing.md)')
+                self.assertEqual(len(errors), 1, errors)
+                self.assertIn('wiki/guide.md:' + str(example.count('\n') + 3) + ':', errors[0])
+        for text in ['paragraph\n    [live](missing.md)', '- paragraph\n    [live](missing.md)',
+                     '> paragraph\n>     [live](missing.md)', r'\![live](missing.md)',
+                     '`<!--` [live](missing.md)', '[live](missing.md) <!-- hidden -->']:
+            with self.subTest(text=text):
+                self.assertEqual(len(self.problems(text)), 1)
+        self.assertEqual(self.problems('<!-- [id] -->\n[id]: missing.md'), [])
+        self.assertEqual(len(self.problems('`<!--\nexample` [live](missing.md)')), 1)
+        self.assertEqual(self.problems('[x](existing[id].md)\n[id]: missing.md'),
+                         ["wiki/guide.md:2: relative link 'existing[id].md' is not a file inside repo"])
+        self.assertEqual(self.problems('[outer [id]](#anchor)\n[id]: missing.md'), [])
+        self.assertEqual(len(self.problems('[![image][id]](#anchor)\n[id]: missing.md')), 1)
+        self.assertEqual(self.problems('\n    [id]: missing.md\n\n[id]'), [])
+
+    def test_entities_decode_before_url_classification(self):
+        for name, dest in [('a&b.md', 'a&amp;b.md'), ('#.md', '&#35;.md'),
+                           ('a b.md', 'a&#32;b.md'), ('a&b.md', 'a&#38;b.md')]:
+            with self.subTest(dest=dest):
+                self.write('wiki/' + name, '')
+                # A leading decoded hash is an anchor and is intentionally ignored.
+                self.assertEqual(self.problems('[x](' + dest + ')'), [])
+                (self.root / 'wiki' / name).unlink()
+                if name != '#.md':
+                    self.assertEqual(len(self.problems('[x](' + dest + ')')), 1)
+        self.assertEqual(self.problems('[x](https&#58;//example.test) [x](&#47;absolute)'), [])
+
+    def test_lexical_aliases_keep_distinct_link_bases(self):
+        self.write('docs/page.md', '[x](target.txt)')
+        self.write('wiki/target.txt', '')
+        (self.root / 'wiki/alias.md').symlink_to(self.root / 'docs/page.md')
+        self.cfg['topics']['guide']['sources'] = [{'path': 'wiki/alias.md'}]
+        self.assertEqual(self.problems('hello'), [])
+        self.cfg['topics']['guide']['sources'].append({'path': 'docs/page.md'})
+        for sources in [self.cfg['topics']['guide']['sources'],
+                        list(reversed(self.cfg['topics']['guide']['sources']))]:
+            self.cfg['topics']['guide']['sources'] = sources
+            errors = self.problems('hello')
+            self.assertEqual(len(errors), 1, errors)
+            self.assertIn('docs/page.md:1:', errors[0])
+        self.write('docs/target.txt', '')
+        self.assertEqual(self.problems('hello'), [])
+
+    def test_complete_wiki_walk_and_directory_alias_cycles(self):
+        for folder in ['.private', 'build', 'vendor', 'node_modules']:
+            self.write('wiki/' + folder + '/page.md', '[x](missing.md)')
+        errors = self.problems('hello')
+        self.assertEqual(len(errors), 4, errors)
+        self.write('docs/guides/page.md', '[x](target.txt)')
+        self.write('docs/guides/target.txt', '')
+        (self.root / 'wiki/guides').symlink_to(self.root / 'docs/guides', target_is_directory=True)
+        (self.root / 'docs/guides/cycle').symlink_to(self.root / 'wiki', target_is_directory=True)
+        self.assertEqual(len(self.problems('hello')), 4)
+        (self.root / 'docs/guides/target.txt').unlink()
+        errors = self.problems('hello')
+        self.assertEqual(len(errors), 5, errors)
+        self.assertTrue(any('wiki/guides/page.md:1:' in error for error in errors))
+
+    def test_shipped_artifacts_match_distributable_assets(self):
+        base = SCRIPT.parents[1]
+        self.assertEqual(SCRIPT.read_bytes(), (base / 'evals/fixtures/routed/scripts/ai-context.py').read_bytes())
+        self.assertEqual((base / 'assets/wiki-ai-context.md').read_bytes(),
+                         (base / 'evals/fixtures/routed/wiki/ai-context.md').read_bytes())
 
     def test_exact_headings_keep_existing_fence_behavior(self):
         self.write('wiki/guide.md', '# Selected\n```sh\n# Selected\n````\n~~~\n# Other\n~~~\nbody\n# End\n')

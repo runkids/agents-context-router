@@ -23,6 +23,7 @@ No dependencies beyond the Python 3.8+ standard library.
 """
 import fnmatch, json, os, re, sys
 from urllib.parse import unquote
+from html import unescape
 
 ROOT = os.path.realpath(os.environ.get('AI_CONTEXT_ROOT') or os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CFG_PATH = os.path.realpath(os.environ.get('AI_CONTEXT_CONFIG') or os.path.join(ROOT, 'wiki', 'ai-context.json'))
@@ -126,6 +127,10 @@ def orphans(cfg, reference_text=''):
     return bad
 
 
+def markdown_unescape(value):
+    return re.sub(r'\\([!"#$%&\'()*+,\-./:;<=>?@\[\]\\^_`{|}~])', r'\1', value)
+
+
 def destination(text, start):
     """Read an angle-wrapped or balanced bare Markdown destination."""
     start += len(text[start:]) - len(text[start:].lstrip())
@@ -155,52 +160,142 @@ def destination(text, start):
     return None
 
 
+def markdown_text(lines):
+    """Mask inactive Markdown contexts without changing offsets or line numbers."""
+    blank = lambda value: re.sub(r'[^\n]', ' ', value)
+    code = re.compile(r'\\[^\n]|(?<!`)(`+)(?!`)([\s\S]*?)(?<!`)\1(?!`)')
+    original = '\n'.join(lines)
+    protected = code.sub(lambda m: blank(m.group()) if m[1] else m.group(), original).split('\n')
+    result = []
+    fence, raw, comment = None, None, False
+    paragraph, list_indent, quote_depth = False, 0, 0
+    for line_index, ln in enumerate(lines):
+        quote = re.match(r'^(?: {0,3}>[ \t]?)+', ln)
+        prefix = quote.end() if quote else 0
+        depth = ln[:prefix].count('>')
+        if depth != quote_depth:
+            paragraph, list_indent = False, 0
+        quote_depth = depth
+        content = ln[prefix:]
+        marker = re.match(r'^ {0,3}(?:[-+*]|\d+[.)])[ \t]+', content)
+        if marker:
+            list_indent = len(marker.group().expandtabs(4))
+            prefix += marker.end()
+            content = ln[prefix:]
+            paragraph = False
+        elif list_indent:
+            spaces = len(content) - len(content.lstrip(' '))
+            if spaces >= list_indent:
+                prefix += list_indent
+                content = ln[prefix:]
+            elif content.strip():
+                list_indent = 0
+        indent = len(content.expandtabs(4)) - len(content.expandtabs(4).lstrip(' '))
+        mark = FENCE.match(content)
+        if fence:
+            result.append(blank(ln))
+            if mark and mark[1].startswith(fence):
+                fence = None
+            paragraph = False
+            continue
+        if raw is not None:
+            result.append(blank(ln))
+            if (not raw and not content.strip()) or (raw and re.search(r'</' + raw + r'\s*>', content, re.I)):
+                raw = None
+            continue
+        if indent >= 4 and not paragraph and not comment:
+            result.append(blank(ln))
+            continue
+        # Ignore comment markers inside inline code; code blocks took precedence.
+        probe = protected[line_index][prefix:]
+        masked = list(content)
+        pos = 0
+        while pos < len(content):
+            start = pos if comment else probe.find('<!--', pos)
+            if start < 0:
+                break
+            end = content.find('-->', start + (0 if comment else 4))
+            stop = len(content) if end < 0 else end + 3
+            masked[start:stop] = blank(content[start:stop])
+            comment = end < 0
+            pos = stop
+        content = ''.join(masked)
+        mark = FENCE.match(content)
+        html = re.match(r'^ {0,3}<(pre|script|style|textarea)(?:\s|>|$)', content, re.I)
+        if mark:
+            fence = mark[1]
+            result.append(blank(ln))
+            paragraph = False
+        elif html:
+            raw = html[1].lower()
+            if re.search(r'</' + raw + r'\s*>', content, re.I):
+                raw = None
+            result.append(blank(ln))
+            paragraph = False
+        elif re.match(r'^ {0,3}</?(?:address|article|aside|blockquote|details|div|dl|fieldset|figure|footer|form|h[1-6]|header|hr|li|main|nav|ol|p|section|table|tbody|td|th|thead|tr|ul)(?:\s|/?>|$)', content, re.I):
+            raw = ''  # Ordinary HTML blocks end at a blank line.
+            result.append(blank(ln))
+            paragraph = False
+        else:
+            result.append(' ' * prefix + content)
+            paragraph = bool(content.strip()) and not HEAD.match(content)
+    text = '\n'.join(result)
+    return code.sub(lambda m: blank(m.group()) if m[1] else m.group(), text)
+
+
 def link_destinations(lines):
     """Yield original line and destination for inline links and used definitions."""
-    visible = {i for i, _ in unfenced(lines)}
-    text = '\n'.join(ln if i in visible else '' for i, ln in enumerate(lines))
-    # Mask code spans, retaining their newlines and all original source offsets.
-    code = re.compile(r'\\[^\n]|(`+)(?!`)([\s\S]*?)(?<!`)\1(?!`)')
-    text = code.sub(lambda m: re.sub(r'[^\n]', ' ', m.group()) if m[1] else m.group(), text)
-    label = re.compile(r'\[((?:\\.|[^\[\]\\])+)\]')
-    normalize = lambda value: ' '.join(re.sub(r'\\([!"#$%&\'()*+,\-./:;<=>?@\[\]\\^_`{|}~])', r'\1', value).split()).casefold()
+    text = markdown_text(lines)
+    normalize = lambda value: ' '.join(markdown_unescape(value).split()).casefold()
+    title = r'(?:"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|\((?:\\.|[^)\\])*\))'
     definitions, used = {}, set()
-    for line, ln in enumerate(text.split('\n'), 1):
-        match = re.match(r'^ {0,3}\[((?:\\.|[^\]\\])+)\]:\s*', ln)
-        if match:
-            found = destination(ln, match.end())
-            if found:
-                definitions.setdefault(normalize(match[1]), (line, found[0]))
+    # A line break may wrap a definition, but a blank line cannot join blocks.
+    definition = re.compile(r'^ {0,3}\[((?:\\.|[^\]\\])+)\]:', re.M)
+    for match in definition.finditer(text):
+        found = destination(text, match.end())
+        if not found or re.search(r'\n[ \t]*\n', text[match.start():found[1]]):
             continue
-        pos = 0
-        while pos < len(ln):
-            if ln[pos] == '\\':
-                # Escaped link/image markup is an example, not a destination.
-                escaped = label.match(ln, pos + 1 + (ln[pos + 1:pos + 2] == '!'))
-                pos = escaped.end() if escaped else pos + 2
-                continue
-            match = label.match(ln, pos)
-            if not match:
-                pos += 1
-                continue
-            end = match.end()
-            if ln[end:end + 1] == '(':
-                found = destination(ln, end + 1)
-                if found:
-                    tail = re.match(r'\s*(?:"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|\((?:\\.|[^)\\])*\))?\s*\)', ln[found[1]:])
-                    if tail:
-                        yield line, found[0]
-                        pos = found[1] + tail.end()
-                        continue
-            reference = label.match(ln, end)
-            if reference:
-                used.add(normalize(reference[1]))
-                end = reference.end()
-            else:
-                used.add(normalize(match[1]))
-                if ln[end:end + 2] == '[]':
-                    end += 2
-            pos = end
+        tail = re.match(r'[ \t]*(?:\n[ \t]*(?=' + title + r'))?(?:' + title + r')?[ \t]*(?=\n|$)', text[found[1]:])
+        if tail:
+            definitions.setdefault(normalize(match[1]), (text.count('\n', 0, match.start()) + 1, found[0]))
+            end = found[1] + tail.end()
+            text = text[:match.start()] + re.sub(r'[^\n]', ' ', text[match.start():end]) + text[end:]
+    # Pair brackets with a stack so nested labels require no recursive parser.
+    pairs, stack, pos = {}, [], 0
+    while pos < len(text):
+        if text[pos] == '\\':
+            pos += 2
+            continue
+        if text[pos] == '[':
+            stack.append(pos)
+        elif text[pos] == ']' and stack:
+            pairs[stack.pop()] = pos
+        pos += 1
+    consumed, destination_ranges, linked_labels = -1, [], []
+    for start, close in sorted(pairs.items()):
+        if start < consumed or any(a <= start < b for a, b in destination_ranges):
+            continue
+        label, end = text[start + 1:close], close + 1
+        if not label or re.search(r'\n[ \t]*\n', label):
+            continue
+        if text[end:end + 1] == '(':
+            found = destination(text, end + 1)
+            if found:
+                tail = re.match(r'\s*(?:' + title + r')?\s*\)', text[found[1]:])
+                stop = found[1] + tail.end() if tail else end
+                if tail and not re.search(r'\n[ \t]*\n', text[start:stop]):
+                    yield text.count('\n', 0, start) + 1, found[0]
+                    destination_ranges.append((end, stop))
+                    linked_labels.append((start, close))
+                    continue
+        if text[start - 1:start] != '!' and any(a < start < b for a, b in linked_labels):
+            continue
+        reference = pairs.get(end)
+        if reference is not None:
+            used.add(normalize(text[end + 1:reference] or label))
+            consumed = reference + 1
+        else:
+            used.add(normalize(label))
     for name, value in definitions.items():
         if name in used:
             yield value
@@ -211,21 +306,32 @@ def link_problems(cfg):
     paths = {s['path'].replace('\\', '/') for t in cfg['topics'].values() for s in t['sources']}
     wiki = cfg.get('wikiDir', 'wiki')
     paths.add(cfg.get('routerFile', f'{wiki}/README.md'))
-    skip = {'.git', 'node_modules', 'dist', 'build', 'vendor', '.venv', 'target'}
-    for directory, dirs, files in os.walk(os.path.join(ROOT, wiki)):
-        dirs[:] = [d for d in dirs if d not in skip and not d.startswith('.')]
-        paths.update(os.path.relpath(os.path.join(directory, f), ROOT)
-                     for f in files if f.endswith('.md'))
+    pending = [(os.path.join(ROOT, wiki), frozenset())]
+    while pending:
+        directory, ancestors = pending.pop()
+        canonical = os.path.realpath(directory)
+        if canonical in ancestors or not (canonical == ROOT or canonical.startswith(ROOT + os.sep)):
+            continue
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    if entry.is_dir():
+                        pending.append((entry.path, ancestors | {canonical}))
+                    elif entry.name.endswith('.md'):
+                        paths.add(os.path.relpath(entry.path, ROOT))
+        except OSError:
+            continue
     bad, seen = [], set()
-    for rel in sorted(paths):
-        path = os.path.realpath(os.path.join(ROOT, rel))
-        if path in seen or not path.startswith(ROOT + os.sep) or not os.path.isfile(path):
+    for rel in sorted({os.path.normpath(p) for p in paths}):
+        path = os.path.abspath(os.path.join(ROOT, rel))
+        canonical = os.path.realpath(path)
+        if path in seen or not canonical.startswith(ROOT + os.sep) or not os.path.isfile(path):
             continue  # Rendering retains ownership of invalid source diagnostics.
         seen.add(path)
         with open(path, encoding='utf-8') as source:
             lines = source.read().split('\n')
         for line, raw in link_destinations(lines):
-            dest = re.sub(r'\\([!"#$%&\'()*+,\-./:;<=>?@\[\]\\^_`{|}~])', r'\1', raw)
+            dest = unescape(markdown_unescape(raw))
             if re.match(r'^[A-Za-z][A-Za-z0-9+.-]*:', dest) or dest.startswith(('/', '\\', '#', '?')):
                 continue
             dest = unquote(re.split(r'[?#]', dest, maxsplit=1)[0])
