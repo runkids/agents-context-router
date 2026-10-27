@@ -737,6 +737,59 @@ class LinkCheckTests(unittest.TestCase):
             self.assertEqual(len(errors), 1, errors)
             self.assertIn('wiki/guide.md:4:', errors[0])
 
+    def test_lazy_quote_paragraphs_keep_live_links_and_original_lines(self):
+        cases = [('> [label\ncontinued](target.txt)', 2),
+                 ('> Note\n    [missing](target.txt)', 3)]
+        for text, line in cases:
+            with self.subTest(text=text):
+                self.write('wiki/guide.md', '# Selected\n' + text)
+                for exists in [True, False, True]:
+                    if exists:
+                        self.write('wiki/target.txt', '')
+                    else:
+                        (self.root / 'wiki/target.txt').unlink()
+                    result = self.cli('check')
+                    self.assertEqual(result.returncode, 0 if exists else 1, result.stdout)
+                    if not exists:
+                        self.assertIn('wiki/guide.md:' + str(line) + ':', result.stdout)
+        for code in ['> ```\n> [example](missing.md)\n> ```',
+                     '\n    [example](missing.md)']:
+            self.assertEqual(self.problems(code), [])
+
+    def test_tab_indented_fence_text_cannot_interrupt_a_paragraph(self):
+        self.write('wiki/guide.md', '# Selected\nNote\n\t~~~\n\t[live](missing.md)\n\t~~~')
+        result = self.cli('check')
+        with self.subTest(case='live paragraph'):
+            self.assertEqual(result.returncode, 1, result.stdout)
+            self.assertIn('wiki/guide.md:4:', result.stdout)
+        for code in ['\n\t~~~\n\t[example](missing.md)\n\t~~~',
+                     'Note\n~~~\n[example](missing.md)\n~~~']:
+            self.assertEqual(self.problems(code), [])
+
+    def test_definition_lookahead_work_is_bounded_by_input_size(self):
+        # Count text presented to the real parser, independent of machine speed.
+        # One-line definitions and heading-separated links need only bounded lookahead.
+        from unittest.mock import patch
+        real_definition = router.reference_definition
+        for kind in ['definitions', 'headings']:
+            for count in [1000, 2000]:
+                with self.subTest(kind=kind, count=count):
+                    if kind == 'definitions':
+                        text = '\n'.join('[d' + str(i) + ']: target.txt' for i in range(count))
+                        text += '\n\n[d' + str(count - 1) + ']'
+                    else:
+                        text = '\n'.join('# Heading\n[link](target.txt)' for _ in range(count))
+                    work = [0]
+                    def measured(candidate):
+                        work[0] += len(candidate)
+                        return real_definition(candidate)
+                    with patch.object(router, 'reference_definition', side_effect=measured):
+                        links = list(router.link_destinations(text.split('\n')))
+                    self.assertEqual(len(links), 1 if kind == 'definitions' else count)
+                    self.assertEqual(links[0], (count if kind == 'definitions' else 2, 'target.txt'))
+                    self.assertLessEqual(work[0], 8 * len(text),
+                                         f'{kind}: {work[0]} candidate characters for {len(text)} input characters')
+
     def test_shipped_artifacts_match_distributable_assets(self):
         base = SCRIPT.parents[1]
         self.assertEqual(SCRIPT.read_bytes(), (base / 'evals/fixtures/routed/scripts/ai-context.py').read_bytes())

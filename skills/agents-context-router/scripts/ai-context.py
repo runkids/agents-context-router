@@ -28,7 +28,7 @@ from html import unescape
 ROOT = os.path.realpath(os.environ.get('AI_CONTEXT_ROOT') or os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CFG_PATH = os.path.realpath(os.environ.get('AI_CONTEXT_CONFIG') or os.path.join(ROOT, 'wiki', 'ai-context.json'))
 HEAD = re.compile(r'^(#{1,6})\s+(.+?)\s*#*\s*$')
-FENCE = re.compile(r'^\s{0,3}(`{3,}|~{3,})')
+FENCE = re.compile(r'^ {0,3}(`{3,}|~{3,})')
 TITLE = r'(?:"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|\((?:\\.|[^)\\])*\))'
 HTML_TAG = re.compile(r"</?[A-Za-z][A-Za-z0-9-]*(?:\s+(?:[^<>\"']|\"[^\"]*\"|'[^']*')*)?\s*/?>")
 
@@ -188,6 +188,68 @@ def indent_prefix(text, minimum=None, start=0):
     return pos, column - start
 
 
+def definition_candidate(lines, index, content, depth, list_indent):
+    """Collect only a possible definition and its optional continuation title."""
+    candidate = [content]
+    def following():
+        for following_index in range(index + 1, len(lines)):
+            line = lines[following_index]
+            quote = re.match(r'^(?: {0,3}>[ \t]?)+', line)
+            end = quote.end() if quote else 0
+            text = line[end:]
+            if line[:end].count('>') != depth or not text.strip():
+                return
+            characters, columns = indent_prefix(text, list_indent)
+            if columns < list_indent:
+                return
+            yield text[characters:]
+    rest = iter(following())
+    text = content
+    # A label may span lines, but CommonMark limits it to 999 characters.
+    while not DEFINITION_START.match(text) and len(text) <= 1002:
+        if not text.lstrip().startswith('[') or ']' in text:
+            return None
+        next_line = next(rest, None)
+        if next_line is None:
+            return None
+        candidate.append(next_line)
+        text = '\n'.join(candidate)
+    match = DEFINITION_START.match(text)
+    if not match or not valid_label(match[1]):
+        return None
+    if not text[match.end():].strip():
+        next_line = next(rest, None)
+        if next_line is not None:
+            candidate.append(next_line)
+            text = '\n'.join(candidate)
+    definition = reference_definition(text)
+    if not definition:
+        found = destination(text, match.end())
+        tail = text[found[1]:].lstrip() if found else ''
+        if not tail.startswith(('"', "'", '(')):
+            return None
+        closing = ')' if tail[0] == '(' else tail[0]
+        for next_line in rest:
+            candidate.append(next_line)
+            if re.search(r'(?<!\\)' + re.escape(closing) + r'[ \t]*$', next_line):
+                break
+        return reference_definition('\n'.join(candidate))
+    # A title can start on the following line and span more than one line.
+    next_line = next(rest, None)
+    if next_line is not None and next_line.lstrip().startswith(('"', "'", '(')):
+        candidate.append(next_line)
+        closing = ')' if next_line.lstrip()[0] == '(' else next_line.lstrip()[0]
+        while not re.search(r'(?<!\\)' + re.escape(closing) + r'[ \t]*$', candidate[-1][1:]):
+            next_line = next(rest, None)
+            if next_line is None:
+                break
+            candidate.append(next_line)
+        extended = reference_definition('\n'.join(candidate))
+        if extended:
+            return extended
+    return definition
+
+
 def markdown_text(lines):
     """Mask inactive Markdown contexts without changing offsets or line numbers."""
     blank = lambda value: re.sub(r'[^\n]', ' ', value)
@@ -212,7 +274,10 @@ def markdown_text(lines):
                 (owner[1] and content.strip() and indentation < owner[1])):
             fence, raw, paragraph = None, None, False
         if depth != quote_depth:
-            paragraph, list_indent = False, 0
+            if paragraph and depth < quote_depth and content.strip():
+                depth = quote_depth  # Lazy continuation of the current paragraph.
+            else:
+                paragraph, list_indent = False, 0
         quote_depth = depth
         thematic = re.fullmatch(r' {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})', content)
         marker = None if thematic else re.match(r'^ {0,3}(?:[-+*]|\d+[.)])[ \t]+', content)
@@ -275,19 +340,7 @@ def markdown_text(lines):
             paragraph = False
         else:
             if not paragraph and content.lstrip().startswith('['):
-                candidate = [content]
-                for following_index in range(line_index + 1, len(lines)):
-                    following = lines[following_index]
-                    q = re.match(r'^(?: {0,3}>[ \t]?)+', following)
-                    qend = q.end() if q else 0
-                    next_content = following[qend:]
-                    if following[:qend].count('>') != depth or not next_content.strip():
-                        break
-                    characters, columns = indent_prefix(next_content, list_indent)
-                    if columns < list_indent:
-                        break
-                    candidate.append(next_content[characters:])
-                definition = reference_definition('\n'.join(candidate))
+                definition = definition_candidate(lines, line_index, content, depth, list_indent)
                 if definition:
                     label, dest, count = definition
                     definitions.append((label, line_index + 1, dest))
