@@ -457,6 +457,25 @@ class LinkCheckTests(unittest.TestCase):
         self.assertEqual(self.problems('[x](\n\nmissing.md)\n[id]:\n\nmissing.md'), [])
 
     def test_context_masks_examples_but_keeps_live_continuations(self):
+        for example in ['-\t- ```\n      [example](missing.md)\n      ```',
+                        '-\t  - [example](missing.md)', '- - ***']:
+            errors = self.problems(example + '\n\n[live](live-missing.md)')
+            self.assertEqual(len(errors), 1, errors)
+            self.assertIn('live-missing.md', errors[0])
+        self.assertEqual(len(self.problems('See [x\n2. - y](missing.md)')), 1)
+        for depth in range(1, 6):
+            for markers in itertools.product(['- ', '1. '], repeat=depth):
+                indentation = ' ' * sum(map(len, markers))
+                lines = [''.join(markers) + '```', indentation + '[example](missing.md)',
+                         indentation + '```', '', '[live](live-missing.md)']
+                for quoted in [False, True]:
+                    sample = (['> ' + line for line in lines[:3]] + ['>', lines[-1]]
+                              if quoted else lines)
+                    with self.subTest(same_line=markers, quoted=quoted):
+                        errors = self.problems('\n'.join(sample))
+                        self.assertEqual(len(errors), 1, errors)
+                        self.assertIn('wiki/guide.md:6:', errors[0])
+                        self.assertIn('live-missing.md', errors[0])
         for digits, valid in [('0' * (length - 1) + '1', length <= 9) for length in range(1, 11)] + [('١', False)]:
             with self.subTest(digits=digits):
                 text = 'See [the\n' + digits + '. guide](target.txt)'

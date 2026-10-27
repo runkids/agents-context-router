@@ -339,12 +339,15 @@ def markdown_text(lines):
                 list_indent = 0
         thematic = THEMATIC.fullmatch(content)
         marker = None if thematic else LIST_MARKER.match(content)
-        if (marker and not (fence or raw is not None) and
-                (not paragraph or sibling or list_interrupts(content, marker))):
+        while (marker and not (fence or raw is not None) and
+               (not paragraph or sibling or list_interrupts(content, marker))):
             end, list_indent, base_column, extra_indent = list_padding(content, marker, base_column)
             prefix += end
             content = ln[prefix:]
             paragraph = False
+            thematic = THEMATIC.fullmatch(content)
+            indent = indent_prefix(content, start=base_column)[1] + extra_indent
+            marker = None if thematic or indent >= 4 else LIST_MARKER.match(content)
         indent = indent_prefix(content, start=base_column)[1] + extra_indent
         mark = LINK_FENCE.match(content)
         if fence:
