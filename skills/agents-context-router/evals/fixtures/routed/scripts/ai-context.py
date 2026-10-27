@@ -255,7 +255,7 @@ def definition_candidate(lines, index, content, depth, list_indent):
     candidate = [content]
     def following():
         for following_index in range(index + 1, len(lines)):
-            line = container_prefix(lines[following_index], list_indent)
+            line = container_prefix(lines[following_index], list_indent)[0]
             quote = re.match(r'^(?: {0,3}>[ \t]?)+', line)
             end = quote.end() if quote else 0
             text = line[end:]
@@ -324,7 +324,7 @@ def container_prefix(line, list_indent):
             pos += 1
         space = line[start:pos]
         indentation += indent_prefix(space)[1]
-        if line[pos:pos + 1] == '>':
+        if line[pos:pos + 1] == '>' and not (list_indent and not saw_list and indentation >= list_indent + 4):
             nested |= saw_list or (list_indent > 0 and indentation >= list_indent)
             end = pos + 1
             if line[end:end + 1] in (' ', '\t'):
@@ -342,7 +342,7 @@ def container_prefix(line, list_indent):
             saw_list, pos = True, pos + end
             if extra or end < match.end():
                 break
-    return ''.join(quotes + lists) + line[pos:] if nested else line
+    return (''.join(quotes + lists) + line[pos:] if nested else line), nested
 
 
 def block_regions(result, eligible):
@@ -372,7 +372,7 @@ def markdown_text(lines):
         if line_index < consumed:
             result.append(blank(ln))
             continue
-        ln = container_prefix(ln, list_indent)
+        ln, nested = container_prefix(ln, list_indent)
         quote = re.match(r'^(?: {0,3}>[ \t]?)+', ln)
         prefix = quote.end() if quote else 0
         depth = ln[:prefix].count('>')
@@ -386,13 +386,13 @@ def markdown_text(lines):
                 (owner[1] and content.strip() and indentation < owner[1])):
             fence, raw, paragraph = None, None, False
         if depth != quote_depth and not (paragraph and depth < quote_depth and content.strip()):
-            paragraph, list_indent, quote_depth = False, 0, depth
+            paragraph, list_indent, quote_depth = False, list_indent if nested else 0, depth
         sibling = bool(list_indent and indentation < list_indent)
         if list_indent:
             characters, columns = indent_prefix(content, list_indent)
             if columns >= list_indent:
                 prefix += characters
-                base_column = columns
+                base_column, extra_indent = columns, columns - list_indent
                 content = ln[prefix:]
             elif content.strip():
                 list_indent = 0

@@ -472,6 +472,29 @@ class LinkCheckTests(unittest.TestCase):
         self.assertEqual(self.problems('[x](\n\nmissing.md)\n[id]:\n\nmissing.md'), [])
 
     def test_context_masks_examples_but_keeps_live_continuations(self):
+        for padding, columns in [('\t', 4), ('\t ', 5), ('\t  ', 6), ('\t   ', 7)]:
+            text = '- item\n' + padding + '> [live](target.txt)'
+            self.assertEqual(len(self.problems(text)), 1, text)
+            blank = '- item\n\n' + padding + '> [live](target.txt)'
+            self.assertEqual(len(self.problems(blank)), int(columns < 6), blank)
+        for spaces in range(2, 8):
+            prefix = ' ' * spaces + '> '
+            for quote in ['', '> ']:
+                text = quote + '- item\n' + quote + prefix + '[live](target.txt)'
+                with self.subTest(spaces=spaces, quote=quote):
+                    self.write('wiki/target.txt', '')
+                    self.assertEqual(self.problems(text), [])
+                    (self.root / 'wiki/target.txt').unlink()
+                    self.assertEqual(len(self.problems(text)), 1, text)
+                    blank = quote + '- item\n' + quote.rstrip() + '\n' + quote + prefix + '[live](target.txt)'
+                    self.assertEqual(len(self.problems(blank)), int(spaces < 6), blank)
+                    if spaces >= 6:
+                        continue
+                    code = (quote + '- item\n' + quote + prefix + '```\n' + quote + prefix +
+                            '[example](missing.md)\n' + quote + prefix + '```\n\n[live](live-missing.md)')
+                    errors = self.problems(code)
+                    self.assertEqual(len(errors), 1, errors)
+                    self.assertIn('live-missing.md', errors[0])
         for opening, continuation in [('-\t> ```', '\t> '), ('- > ```', '  > ')]:
             text = opening + '\n' + continuation + '[example](missing.md)\n' + continuation + '```\n\n[live](live-missing.md)'
             errors = self.problems(text)
