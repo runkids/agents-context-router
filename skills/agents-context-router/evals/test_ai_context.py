@@ -412,7 +412,7 @@ class LinkCheckTests(unittest.TestCase):
         self.assertEqual(len(self.problems('`<!--\nexample` [live](missing.md)')), 1)
         self.assertEqual(self.problems('[x](existing[id].md)\n\n[id]: missing.md'),
                          ["wiki/guide.md:2: relative link 'existing[id].md' is not a file inside repo"])
-        self.assertEqual(self.problems('[outer [id]](#anchor)\n\n[id]: missing.md'), [])
+        self.assertEqual(len(self.problems('[outer [id]](#anchor)\n\n[id]: missing.md')), 1)
         self.assertEqual(len(self.problems('[![image][id]](#anchor)\n\n[id]: missing.md')), 1)
         self.assertEqual(self.problems('\n    [id]: missing.md\n\n[id]'), [])
 
@@ -648,6 +648,74 @@ class LinkCheckTests(unittest.TestCase):
             with self.subTest(label=label, use=use):
                 errors = self.problems('[' + label + ']: missing.md\n\n[' + use + ']')
                 self.assertEqual(len(errors), int(matches))
+
+    def test_opaque_destinations_and_neighbors_through_cli(self):
+        self.write('wiki/neighbor.txt', '')
+        cases = [('[x](<target`name.txt>) and `example` [n](neighbor.txt)', 'target`name.txt'),
+                 ('[x](file<!--name.txt) and [n](neighbor.txt)', 'file<!--name.txt'),
+                 ('[x](<target[bracket].txt>) `sample`', 'target[bracket].txt')]
+        for text, name in cases:
+            with self.subTest(text=text):
+                self.write('wiki/guide.md', '# Selected\n' + text)
+                for exists in [True, False, True]:
+                    if exists:
+                        self.write('wiki/' + name, '')
+                    else:
+                        (self.root / 'wiki' / name).unlink()
+                    result = self.cli('check')
+                    self.assertEqual(result.returncode, 0 if exists else 1, result.stdout)
+                    if not exists:
+                        self.assertIn('wiki/guide.md:2:', result.stdout)
+                        self.assertIn(name, result.stdout)
+                (self.root / 'wiki' / name).unlink()
+
+    def test_autolinks_code_html_and_inline_comment_ownership(self):
+        self.write('wiki/good.txt', '')
+        for opaque in ['<https://example.test/[x](missing.md)>', '<user+tag@example.test>',
+                       '`<!-- [x](missing.md) -->`', '`` ` [x](missing.md) ``',
+                       r'\`` [x](missing.md) `',
+                       '<span title="[x](missing.md)">text</span>',
+                       '<!-- [x](missing.md) -->', '<?pi [x](missing.md) ?>',
+                       '<!DECL [x](missing.md)>', '<![CDATA[[x](missing.md)]]>']:
+            with self.subTest(opaque=opaque):
+                errors = self.problems('[a](good.txt) ' + opaque + ' [live](missing.md)')
+                self.assertEqual(len(errors), 1, errors)
+                self.assertIn('wiki/guide.md:2:', errors[0])
+        for text in ['text <!-- unfinished\n\n[live](missing.md)',
+                     'text <span title="unfinished\n\n[live](missing.md)\n">',
+                     'text <span title="unfinished\n# Heading\n[live](missing.md)\n">',
+                     '`<!--\nexample` [live](missing.md)',
+                     'text <!-- complete\ncomment --> [live](missing.md)']:
+            with self.subTest(text=text):
+                self.assertEqual(len(self.problems(text)), 1)
+        self.assertEqual(self.problems('text <!--\n[x](missing.md)\n-->'), [])
+        self.assertEqual(self.problems('\n<!-- unfinished\n\n[x](missing.md)'), [])
+
+    def test_resolved_link_and_image_nesting(self):
+        self.write('wiki/good.txt', '')
+        cases = [('[outer [inner](good.txt)](missing.md)', 0),
+                 ('[outer [id]](missing.md)\n\n[id]: good.txt', 0),
+                 ('[outer [id]](#anchor)\n\n[id]: missing.md', 1),
+                 ('[outer ![image](good.txt)](missing.md)', 1),
+                 ('![outer [inner](good.txt)](missing.md)', 1),
+                 ('[outer ![image][id]](missing.md)\n\n[id]: good.txt', 1),
+                 ('![outer [id]](missing.md)\n\n[id]: good.txt', 1),
+                 ('[outer [undefined]](missing.md)', 1),
+                 ('[undefined][other][live](missing.md)', 1),
+                 ('[outer [inner](missing.md)](also-missing.md)', 1),
+                 ('[x][bad [label]]\n\n[bad [label]]: missing.md', 0),
+                 (r'[x][escaped\[label]'+ '\n\n' + r'[escaped\[label]: missing.md', 1),
+                 ('[x][' + 'a' * 1000 + ']\n\n[' + 'a' * 1000 + ']: missing.md', 0)]
+        for text, count in cases:
+            with self.subTest(text=text):
+                self.assertEqual(len(self.problems(text)), count)
+        self.write('wiki/guide.md', '# Selected\n[outer [inner](good.txt)](missing.md)')
+        self.assertEqual(self.cli('check').returncode, 0)
+        (self.root / 'wiki/good.txt').unlink()
+        result = self.cli('check')
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertNotIn("relative link 'missing.md'", result.stdout)
+        self.assertIn("relative link 'good.txt'", result.stdout)
 
     def test_shipped_artifacts_match_distributable_assets(self):
         base = SCRIPT.parents[1]

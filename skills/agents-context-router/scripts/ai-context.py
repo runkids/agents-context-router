@@ -32,6 +32,16 @@ FENCE = re.compile(r'^\s{0,3}(`{3,}|~{3,})')
 TITLE = r'(?:"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|\((?:\\.|[^)\\])*\))'
 HTML_TAG = re.compile(r"</?[A-Za-z][A-Za-z0-9-]*(?:\s+(?:[^<>\"']|\"[^\"]*\"|'[^']*')*)?\s*/?>")
 
+PUNCTUATION = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'
+BACKTICKS = re.compile(r'`+')
+BLANK_LINE = re.compile(r'\n[ \t]*\n')
+WHITESPACE = re.compile(r'[ \t\r\n]*')
+INLINE_END = re.compile(r'\s*(?:' + TITLE + r')?\s*\)')
+AUTOLINK = re.compile(r'<(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\x00-\x20]*|[A-Za-z0-9.!#$%&\'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+)>')
+INLINE_HTML = re.compile(r'<!--(?:(?!-->)[\s\S])*-->|<\?[\s\S]*?\?>|<![A-Z][\s\S]*?>|<!\[CDATA\[[\s\S]*?\]\]>|' + HTML_TAG.pattern)
+DEFINITION_START = re.compile(r'^ {0,3}\[((?:\\.|[^\]\\])+)\]:')
+DEFINITION_END = re.compile(r'[ \t]*(?:\n[ \t]*(?=' + TITLE + r'))?(?:' + TITLE + r')?[ \t]*(?:\n|$)')
+
 
 def load_cfg():
     if not os.path.exists(CFG_PATH):
@@ -126,25 +136,26 @@ def markdown_unescape(value):
     return re.sub(r'\\([!"#$%&\'()*+,\-./:;<=>?@\[\]\\^_`{|}~])', r'\1', value)
 
 
-def destination(text, start):
+def destination(text, start, end=None):
     """Read an angle-wrapped or balanced bare Markdown destination."""
-    start += len(text[start:]) - len(text[start:].lstrip())
+    end = len(text) if end is None else end
+    start = WHITESPACE.match(text, start, end).end()
     angle = text[start:start + 1] == '<'
     pos, depth = start + angle, 0
     begin = pos
-    while pos < len(text):
+    while pos < end:
         char = text[pos]
-        if char == '\\' and pos + 1 < len(text):
+        if char == '\\' and pos + 1 < end:
             pos += 2
             continue
         if angle:
             if char == '>':
                 return text[begin:pos], pos + 1
-            if char == '\n':
+            if char in '<\n':
                 break
         else:
             if char.isspace() or (char == ')' and depth == 0):
-                return text[begin:pos], pos
+                return (text[begin:pos], pos) if depth == 0 else None
             if char == '(':
                 depth += 1
             elif char == ')':
@@ -157,26 +168,23 @@ def destination(text, start):
 
 def reference_definition(text):
     """Read one complete definition and its exact consumed line count."""
-    match = re.match(r'^ {0,3}\[((?:\\.|[^\]\\])+)\]:', text)
-    found = destination(text, match.end()) if match else None
-    if not found or re.search(r'\n[ \t]*\n', text[:found[1]]):
+    match = DEFINITION_START.match(text)
+    found = destination(text, match.end()) if match and valid_label(match[1]) else None
+    if not found or BLANK_LINE.search(text, 0, found[1]):
         return None
-    tail = re.match(r'[ \t]*(?:\n[ \t]*(?=' + TITLE + r'))?(?:' + TITLE + r')?[ \t]*(?:\n|$)', text[found[1]:])
+    tail = DEFINITION_END.match(text, found[1], len(text))
     if tail:
-        end = found[1] + tail.end()
-        return match[1], found[0], text[:end].count('\n') + (not text[:end].endswith('\n'))
+        end = tail.end()
+        return match[1], found[0], text.count('\n', 0, end) + (text[end - 1:end] != '\n')
     return None
 
 
 def markdown_text(lines):
     """Mask inactive Markdown contexts without changing offsets or line numbers."""
     blank = lambda value: re.sub(r'[^\n]', ' ', value)
-    code = re.compile(r'\\[^\n]|(?<!`)(`+)(?!`)((?:(?!\n[ \t]*\n)[\s\S])*?)(?<!`)\1(?!`)')
-    original = '\n'.join(lines)
-    protected = code.sub(lambda m: blank(m.group()) if m[1] else m.group(), original).split('\n')
-    result, definitions = [], []
+    result, definitions, eligible = [], [], []
     consumed, owner = 0, (0, 0)
-    fence, raw, comment = None, None, False
+    fence, raw = None, None
     paragraph, list_indent, quote_depth = False, 0, 0
     for line_index, ln in enumerate(lines):
         if line_index < consumed:
@@ -223,23 +231,9 @@ def markdown_text(lines):
             if (not raw and not content.strip()) or (raw and re.search(raw, content, re.I)):
                 raw = None
             continue
-        if indent >= 4 and not paragraph and not comment:
+        if indent >= 4 and not paragraph:
             result.append(blank(ln))
             continue
-        # Ignore comment markers inside inline code; code blocks took precedence.
-        probe = protected[line_index][prefix:]
-        masked = list(content)
-        pos = 0
-        while pos < len(content):
-            start = pos if comment else probe.find('<!--', pos)
-            if start < 0:
-                break
-            end = content.find('-->', start + (0 if comment else 4))
-            stop = len(content) if end < 0 else end + 3
-            masked[start:stop] = blank(content[start:stop])
-            comment = end < 0
-            pos = stop
-        content = ''.join(masked)
         mark = FENCE.match(content)
         html = re.match(r'^ {0,3}<(pre|script|style|textarea)(?:\s|>|$)', content, re.I)
         if mark and (mark[1][0] == '~' or '`' not in content[mark.end():]):
@@ -254,8 +248,9 @@ def markdown_text(lines):
                 raw = None
             result.append(blank(ln))
             paragraph = False
-        elif re.match(r'^ {0,3}(?:<\?|<![A-Z]|<!\[CDATA\[)', content):
-            raw = r'\?>' if content.lstrip().startswith('<?') else (r'\]\]>' if '<![CDATA[' in content else '>')
+        elif re.match(r'^ {0,3}(?:<!--|<\?|<![A-Z]|<!\[CDATA\[)', content):
+            raw = (r'-->' if content.lstrip().startswith('<!--') else r'\?>' if content.lstrip().startswith('<?')
+                   else r'\]\]>' if content.lstrip().startswith('<![CDATA[') else '>')
             owner = (depth, list_indent)
             if re.search(raw, content):
                 raw = None
@@ -270,7 +265,8 @@ def markdown_text(lines):
         else:
             if not paragraph and content.lstrip().startswith('['):
                 candidate = [content]
-                for following in lines[line_index + 1:]:
+                for following_index in range(line_index + 1, len(lines)):
+                    following = lines[following_index]
                     q = re.match(r'^(?: {0,3}>[ \t]?)+', following)
                     qend = q.end() if q else 0
                     next_content = following[qend:]
@@ -289,62 +285,118 @@ def markdown_text(lines):
             result.append(' ' * prefix + content)
             boundary = (thematic or re.match(r'^ {0,3}#{1,6}(?:[ \t]|$)', content) or
                         (paragraph and re.fullmatch(r' {0,3}(?:=+|-+)[ \t]*', content)))
+            if content.strip():
+                eligible.append((line_index, not paragraph or bool(boundary), bool(boundary), (depth, list_indent)))
             paragraph = bool(content.strip()) and not boundary
-    text = '\n'.join(result)
-    return code.sub(lambda m: blank(m.group()) if m[1] else m.group(), text), definitions
+    offsets = [0]
+    for ln in result:
+        offsets.append(offsets[-1] + len(ln) + 1)
+    regions, previous, ended, scope = [], -2, True, None
+    for index, starts, ends, container in eligible:
+        end = offsets[index] + len(result[index])
+        if index == previous + 1 and not starts and not ended and container == scope:
+            regions[-1] = (regions[-1][0], end, regions[-1][2])
+        else:
+            regions.append((offsets[index], end, index + 1))
+        previous, ended, scope = index, ends, container
+    return '\n'.join(result), definitions, regions
 
 
 def link_destinations(lines):
-    """Yield original line and destination for inline links and used definitions."""
-    text, collected = markdown_text(lines)
+    """Resolve inline syntax once, in source order, inside eligible blocks."""
+    text, collected, regions = markdown_text(lines)
     normalize = lambda value: re.sub(r'[ \t\r\n]+', ' ', value.strip(' \t\r\n')).casefold()
     definitions, used = {}, set()
     for label, line, dest in collected:
         definitions.setdefault(normalize(label), (line, dest))
-    # Pair brackets with a stack so nested labels require no recursive parser.
-    pairs, stack, pos = {}, [], 0
-    while pos < len(text):
-        if text[pos] == '\\':
-            pos += 2
-            continue
-        if text[pos] == '<' and (token := HTML_TAG.match(text, pos)):
-            pos = token.end()
-            continue
-        if text[pos] == '[':
-            stack.append(pos)
-        elif text[pos] == ']' and stack:
-            pairs[stack.pop()] = pos
-        pos += 1
-    consumed, destination_ranges, linked_labels = -1, [], []
-    for start, close in sorted(pairs.items()):
-        if start < consumed or any(a <= start < b for a, b in destination_ranges):
-            continue
-        label, end = text[start + 1:close], close + 1
-        if re.search(r'\n[ \t]*\n', label):
-            continue
-        if text[end:end + 1] == '(':
-            found = destination(text, end + 1)
-            if found:
-                tail = re.match(r'\s*(?:' + TITLE + r')?\s*\)', text[found[1]:])
-                stop = found[1] + tail.end() if tail else end
-                if tail and not re.search(r'\n[ \t]*\n', text[start:stop]):
-                    yield text.count('\n', 0, start) + 1, found[0]
-                    destination_ranges.append((end, stop))
-                    linked_labels.append((start, close))
-                    continue
-        if text[start - 1:start] != '!' and any(a < start < b for a, b in linked_labels):
-            continue
-        if not label:
-            continue
-        reference = pairs.get(end)
-        if reference is not None:
-            used.add(normalize(text[end + 1:reference] or label))
-            consumed = reference + 1
-        else:
-            used.add(normalize(label))
+    for begin, end, line in regions:
+        # Index exact backtick-run closers without assigning token ownership yet.
+        closers, latest = {}, {}
+        runs = list(BACKTICKS.finditer(text, begin, end))
+        for run in reversed(runs):
+            size = run.end() - run.start()
+            # An escaped first backtick may leave a shorter opening run.
+            for width in range(1, size + 1):
+                closers[run.end() - width] = latest.get(width)
+            latest[size] = run.start()
+        stack, generation, pos = [], 0, begin
+        while pos < end:
+            char, stop = text[pos], pos + 1
+            if char == '\\' and pos + 1 < end and text[pos + 1] in PUNCTUATION:
+                stop = pos + 2
+            elif char == '`':
+                run = BACKTICKS.match(text, pos, end)
+                close = closers.get(pos)
+                stop = close + run.end() - pos if close is not None else run.end()
+            elif char == '<':
+                token = AUTOLINK.match(text, pos, end) or INLINE_HTML.match(text, pos, end)
+                if token:
+                    stop = token.end()
+            elif char == '[' or (char == '!' and text[pos + 1:pos + 2] == '['):
+                image = char == '!'
+                opening = pos + image
+                stack.append((opening, line, image, generation))
+                stop = opening + 1
+            elif char == ']' and stack:
+                opening, source_line, image, opened_generation = stack.pop()
+                if image or opened_generation == generation:
+                    target, reference = None, None
+                    if stop < end and text[stop] == '(':
+                        found = destination(text, stop + 1, end)
+                        tail = INLINE_END.match(text, found[1], end) if found else None
+                        if tail:
+                            target, stop = found[0], tail.end()
+                    if target is None:
+                        label = reference_label(text, stop, end) if text[stop:stop + 1] == '[' else None
+                        own = text[opening + 1:pos] if pos - opening <= 1000 else ''
+                        value = (label[0] or own) if label else own
+                        if valid_label(value):
+                            key = normalize(value)
+                            if key in definitions:
+                                reference = key
+                                if label:
+                                    stop = label[1]
+                    if target is not None or reference is not None:
+                        if not image:
+                            generation += 1  # Earlier link openers become inactive; images remain active.
+                        if reference is not None:
+                            used.add(reference)
+                        else:
+                            yield source_line, target
+            line += text.count('\n', pos, stop)
+            pos = stop
     for name, value in definitions.items():
         if name in used:
             yield value
+
+
+def valid_label(value):
+    if not value.strip(' \t\r\n') or len(value) > 999 or BLANK_LINE.search(value):
+        return False
+    pos = 0
+    while pos < len(value):
+        if value[pos] == '\\' and pos + 1 < len(value) and value[pos + 1] in PUNCTUATION:
+            pos += 2
+            continue
+        if value[pos] in '[]':
+            return False
+        pos += 1
+    return True
+
+
+def reference_label(text, start, end):
+    pos = start + 1
+    while pos < end and pos - start <= 1000:
+        if text[pos] == '\\' and pos + 1 < end and text[pos + 1] in PUNCTUATION:
+            pos += 2
+            continue
+        if text[pos] == ']':
+            value = text[start + 1:pos]
+            return (value, pos + 1) if not value or valid_label(value) else None
+        if text[pos] == '[':
+            break
+        pos += 1
+    return None
 
 
 def link_problems(cfg):
