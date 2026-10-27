@@ -194,14 +194,14 @@ def indent_prefix(text, minimum=None, start=0):
     return pos, column - start
 
 
-def list_padding(content, marker):
+def list_padding(content, marker, base=0):
     """Return marker prefix, list indentation, and any partially consumed tab."""
     start = re.match(r'^ {0,3}(?:[-+*]|\d+[.)])', content).end()
-    padding, columns = indent_prefix(content[start:marker.end()], start=start)
+    padding, columns = indent_prefix(content[start:marker.end()], start=base + start)
     if columns <= 4:
-        return marker.end(), start + columns, start + columns, 0
-    first_columns = indent_prefix(content[start:start + 1], start=start)[1]
-    return start + 1, start + 1, start + first_columns, first_columns - 1
+        return marker.end(), base + start + columns, base + start + columns, 0
+    first_columns = indent_prefix(content[start:start + 1], start=base + start)[1]
+    return start + 1, base + start + 1, base + start + first_columns, first_columns - 1
 
 
 def title_continuations(lines):
@@ -237,7 +237,7 @@ def definition_candidate(lines, index, content, depth, list_indent):
     text = content
     # A label may span lines, but CommonMark limits it to 999 characters.
     while not DEFINITION_START.match(text) and len(text) <= 1002:
-        if not text.lstrip().startswith('[') or ']' in text:
+        if not text.lstrip().startswith('[') or ']' in re.sub(r'\\.', '', text):
             return None
         next_line = next(rest, None)
         if next_line is None:
@@ -306,14 +306,7 @@ def markdown_text(lines):
             fence, raw, paragraph = None, None, False
         if depth != quote_depth and not (paragraph and depth < quote_depth and content.strip()):
             paragraph, list_indent, quote_depth = False, 0, depth
-        thematic = THEMATIC.fullmatch(content)
-        marker = None if thematic else LIST_MARKER.match(content)
-        if marker and not (fence or raw is not None):
-            end, list_indent, base_column, extra_indent = list_padding(content, marker)
-            prefix += end
-            content = ln[prefix:]
-            paragraph = False
-        elif list_indent:
+        if list_indent:
             characters, columns = indent_prefix(content, list_indent)
             if columns >= list_indent:
                 prefix += characters
@@ -321,6 +314,13 @@ def markdown_text(lines):
                 content = ln[prefix:]
             elif content.strip():
                 list_indent = 0
+        thematic = THEMATIC.fullmatch(content)
+        marker = None if thematic else LIST_MARKER.match(content)
+        if marker and not (fence or raw is not None):
+            end, list_indent, base_column, extra_indent = list_padding(content, marker, base_column)
+            prefix += end
+            content = ln[prefix:]
+            paragraph = False
         indent = indent_prefix(content, start=base_column)[1] + extra_indent
         mark = LINK_FENCE.match(content)
         if fence:

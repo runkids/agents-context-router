@@ -304,6 +304,17 @@ class LinkCheckTests(unittest.TestCase):
                 (self.root / 'wiki' / name).unlink()
 
     def test_used_references_report_definition_once(self):
+        for slashes, matched in [(1, True), (2, False), (3, True)]:
+            label = '[foo' + '\\' * slashes + ']\nbar]'
+            text = label + ': target.txt\n\n' + label
+            with self.subTest(slashes=slashes):
+                self.write('wiki/target.txt', '')
+                self.assertEqual(self.problems(text), [])
+                (self.root / 'wiki/target.txt').unlink()
+                errors = self.problems(text)
+                self.assertEqual(len(errors), int(matched), errors)
+                if matched:
+                    self.assertIn('wiki/guide.md:2:', errors[0])
         text = '[Full][ Some ID ]\n![Some ID][]\n[Some ID]\n\n[some id]: <missing file.md> "title"\n'
         errors = self.problems(text)
         self.assertEqual(len(errors), 1)
@@ -418,6 +429,24 @@ class LinkCheckTests(unittest.TestCase):
         self.assertEqual(self.problems('[x](\n\nmissing.md)\n[id]:\n\nmissing.md'), [])
 
     def test_context_masks_examples_but_keeps_live_continuations(self):
+        for depth in range(1, 6):
+            for markers in itertools.product(['- ', '1. '], repeat=depth):
+                indent, lines = '', []
+                for marker in markers[:-1]:
+                    lines.append(indent + marker + 'item')
+                    indent += ' ' * len(marker)
+                lines.extend([indent + markers[-1] + '```',
+                              indent + ' ' * len(markers[-1]) + '[example](missing.md)',
+                              indent + ' ' * len(markers[-1]) + '```',
+                              '', '[live](live-missing.md)'])
+                for quoted in [False, True]:
+                    sample = (['> ' + line for line in lines[:-2]] + ['>', lines[-1]]
+                              if quoted else lines)
+                    with self.subTest(markers=markers, quoted=quoted):
+                        errors = self.problems('\n'.join(sample))
+                        self.assertEqual(len(errors), 1, errors)
+                        self.assertIn('live-missing.md', errors[0])
+                        self.assertIn('wiki/guide.md:' + str(depth + 5) + ':', errors[0])
         examples = ['\n    [x](missing.md)', '\n\t[x](missing.md)',
                     '\n>     [x](missing.md)', '- item\n\n      [x](missing.md)',
                     '> ```md\n> [x](missing.md)\n> ```',
