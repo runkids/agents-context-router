@@ -294,8 +294,8 @@ class LinkCheckTests(unittest.TestCase):
                 self.assertEqual(len(self.problems('[id]: missing.md\n' + usage)), 1)
         self.assertEqual(self.problems('[unused]: missing.md\n[undefined]\n'), [])
         self.write('wiki/good.md', '')
-        self.assertEqual(self.problems('[id]\n[id]: good.md\n[id]: missing.md'), [])
-        self.assertEqual(len(self.problems(r'[a\*b]' + '\n[a*b]: missing.md')), 1)
+        self.assertEqual(self.problems('[id]\n\n[id]: good.md\n[id]: missing.md'), [])
+        self.assertEqual(len(self.problems(r'[a\*b]' + '\n\n[a*b]: missing.md')), 1)
 
     def test_code_escapes_and_original_lines(self):
         text = ('```md\n[x](missing.md)\n```\n~~~\n[id]\n~~~\n'
@@ -410,10 +410,10 @@ class LinkCheckTests(unittest.TestCase):
                 self.assertEqual(len(self.problems(text)), 1)
         self.assertEqual(self.problems('<!-- [id] -->\n[id]: missing.md'), [])
         self.assertEqual(len(self.problems('`<!--\nexample` [live](missing.md)')), 1)
-        self.assertEqual(self.problems('[x](existing[id].md)\n[id]: missing.md'),
+        self.assertEqual(self.problems('[x](existing[id].md)\n\n[id]: missing.md'),
                          ["wiki/guide.md:2: relative link 'existing[id].md' is not a file inside repo"])
-        self.assertEqual(self.problems('[outer [id]](#anchor)\n[id]: missing.md'), [])
-        self.assertEqual(len(self.problems('[![image][id]](#anchor)\n[id]: missing.md')), 1)
+        self.assertEqual(self.problems('[outer [id]](#anchor)\n\n[id]: missing.md'), [])
+        self.assertEqual(len(self.problems('[![image][id]](#anchor)\n\n[id]: missing.md')), 1)
         self.assertEqual(self.problems('\n    [id]: missing.md\n\n[id]'), [])
 
     def test_entities_decode_before_url_classification(self):
@@ -502,6 +502,71 @@ class LinkCheckTests(unittest.TestCase):
             self.assertEqual(len(errors), 2, errors)
             self.assertIn('wiki/guide.md:2:', errors[0])
             self.assertIn('wiki/guide.md:4:', errors[1])
+
+    def test_container_masks_expire_but_owned_blocks_stay_masked(self):
+        exits = ['> ```\n> sample\n\n', '- ```\n  sample\n\n',
+                 '> <pre>\n> sample\n\n', '- <pre>\n  sample\n\n',
+                 '- ```\n  sample\n- ', '> > ```\n> > sample\n> ',
+                 '- item\n  - ```\n    sample\n  - ']
+        for example in exits:
+            with self.subTest(example=example):
+                errors = self.problems(example + '[live](missing.md)')
+                self.assertEqual(len(errors), 1, errors)
+                self.assertIn('wiki/guide.md:' + str(example.count('\n') + 2) + ':', errors[0])
+        for text in ['```\n- [example](missing.md)', '> ```\n> - [example](missing.md)',
+                     '- ```\n  - [example](missing.md)', '> <pre>\n> [example](missing.md)',
+                     '- ```\n  sample\n\n  [example](missing.md)']:
+            with self.subTest(text=text):
+                self.assertEqual(self.problems(text), [])
+        self.write('wiki/guide.md', '# Selected\n> ```\n> sample\n\n[live](missing.md)')
+        result = self.cli('check')
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn('wiki/guide.md:5:', result.stdout)
+
+    def test_backtick_info_and_definition_block_boundaries(self):
+        self.assertEqual(len(self.problems('```foo`bar\n[live](missing.md)')), 1)
+        self.assertEqual(self.problems('~~~foo`bar\n[example](missing.md)'), [])
+        self.assertEqual(self.problems('paragraph\n[id]: missing.md\n\n[id]'), [])
+        for text in ['\n[id]: missing.md\n[id]', '# Heading\n[id]: missing.md\n[id]',
+                     '- [id]: missing.md\n\n  [id]', '[id]:\n  missing.md\n[id]', '[id]:\n  ```\n[id]',
+                     '[id]: missing.md\n "title"\n[id]',
+                     '[one]: good.txt\n[two]: missing.md\n[two]']:
+            with self.subTest(text=text):
+                self.assertEqual(len(self.problems(text)), 1)
+        self.assertEqual(self.problems('[id]: good.txt\nparagraph\n[other]: missing.md\n\n[other]'), [])
+        for text in ['[id]:\n  good.txt\n[live](missing.md)',
+                     '[id]: good.txt\n "title"\n[live](missing.md)']:
+            errors = self.problems(text)
+            self.assertEqual(len(errors), 1, errors)
+            self.assertIn('wiki/guide.md:4:', errors[0])
+        errors = self.problems('[id]: good.txt\n[live](missing.md)')
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn('wiki/guide.md:3:', errors[0])
+
+    def test_link_read_errors_report_and_continue(self):
+        for name in ['wiki/guide.md', 'wiki/unreadable.md']:
+            with self.subTest(name=name):
+                path = self.root / name
+                path.write_bytes(b'\xff')
+                self.write('wiki/extra.md', '[x](missing.md)')
+                result = self.cli('check')
+                self.assertEqual(result.returncode, 1)
+                self.assertNotIn('Traceback', result.stderr)
+                self.assertIn('FAIL ' + name + ':', result.stdout)
+                self.assertIn('wiki/extra.md:1:', result.stdout)
+                self.write(name, '# Selected\n')
+        real_open = open
+        from unittest.mock import patch
+        for denied, live in [('extra.md', 'wiki/guide.md:2:'),
+                             ('guide.md', 'wiki/extra.md:1:')]:
+            def deny(path, *args, **kwargs):
+                if str(path).endswith(denied):
+                    raise PermissionError('denied for test')
+                return real_open(path, *args, **kwargs)
+            with self.subTest(denied=denied), patch('builtins.open', side_effect=deny):
+                errors = self.problems('[x](missing.md)')
+            self.assertTrue(any('wiki/' + denied + ':' in e and 'denied for test' in e for e in errors))
+            self.assertTrue(any(live in e for e in errors))
 
     def test_shipped_artifacts_match_distributable_assets(self):
         base = SCRIPT.parents[1]

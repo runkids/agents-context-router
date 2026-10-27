@@ -29,6 +29,7 @@ ROOT = os.path.realpath(os.environ.get('AI_CONTEXT_ROOT') or os.path.dirname(os.
 CFG_PATH = os.path.realpath(os.environ.get('AI_CONTEXT_CONFIG') or os.path.join(ROOT, 'wiki', 'ai-context.json'))
 HEAD = re.compile(r'^(#{1,6})\s+(.+?)\s*#*\s*$')
 FENCE = re.compile(r'^\s{0,3}(`{3,}|~{3,})')
+TITLE = r'(?:"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|\((?:\\.|[^)\\])*\))'
 
 
 def load_cfg():
@@ -153,25 +154,46 @@ def destination(text, start):
     return None
 
 
+def reference_definition(text):
+    """Read one complete definition and its exact consumed line count."""
+    match = re.match(r'^ {0,3}\[((?:\\.|[^\]\\])+)\]:', text)
+    found = destination(text, match.end()) if match else None
+    if not found or re.search(r'\n[ \t]*\n', text[:found[1]]):
+        return None
+    tail = re.match(r'[ \t]*(?:\n[ \t]*(?=' + TITLE + r'))?(?:' + TITLE + r')?[ \t]*(?:\n|$)', text[found[1]:])
+    if tail:
+        end = found[1] + tail.end()
+        return match[1], found[0], text[:end].count('\n') + (not text[:end].endswith('\n'))
+    return None
+
+
 def markdown_text(lines):
     """Mask inactive Markdown contexts without changing offsets or line numbers."""
     blank = lambda value: re.sub(r'[^\n]', ' ', value)
     code = re.compile(r'\\[^\n]|(?<!`)(`+)(?!`)((?:(?!\n[ \t]*\n)[\s\S])*?)(?<!`)\1(?!`)')
     original = '\n'.join(lines)
     protected = code.sub(lambda m: blank(m.group()) if m[1] else m.group(), original).split('\n')
-    result, prefixes = [], []
+    result, definitions = [], []
+    consumed, owner = 0, (0, 0)
     fence, raw, comment = None, None, False
     paragraph, list_indent, quote_depth = False, 0, 0
     for line_index, ln in enumerate(lines):
+        if line_index < consumed:
+            result.append(blank(ln))
+            continue
         quote = re.match(r'^(?: {0,3}>[ \t]?)+', ln)
         prefix = quote.end() if quote else 0
         depth = ln[:prefix].count('>')
+        content = ln[prefix:]
+        indentation = len(content) - len(content.lstrip(' '))
+        if (fence or raw is not None) and (depth < owner[0] or
+                (owner[1] and content.strip() and indentation < owner[1])):
+            fence, raw, paragraph = None, None, False
         if depth != quote_depth:
             paragraph, list_indent = False, 0
         quote_depth = depth
-        content = ln[prefix:]
         marker = re.match(r'^ {0,3}(?:[-+*]|\d+[.)])[ \t]+', content)
-        if marker:
+        if marker and not (fence or raw is not None):
             list_indent = len(marker.group().expandtabs(4))
             prefix += marker.end()
             content = ln[prefix:]
@@ -183,7 +205,6 @@ def markdown_text(lines):
                 content = ln[prefix:]
             elif content.strip():
                 list_indent = 0
-        prefixes.append(prefix)
         indent = len(content.expandtabs(4)) - len(content.expandtabs(4).lstrip(' '))
         mark = FENCE.match(content)
         if fence:
@@ -216,47 +237,55 @@ def markdown_text(lines):
         content = ''.join(masked)
         mark = FENCE.match(content)
         html = re.match(r'^ {0,3}<(pre|script|style|textarea)(?:\s|>|$)', content, re.I)
-        if mark:
+        if mark and (mark[1][0] == '~' or '`' not in content[mark.end():]):
             fence = mark[1]
+            owner = (depth, list_indent)
             result.append(blank(ln))
             paragraph = False
         elif html:
             raw = html[1].lower()
+            owner = (depth, list_indent)
             if re.search(r'</' + raw + r'\s*>', content, re.I):
                 raw = None
             result.append(blank(ln))
             paragraph = False
         elif re.match(r'^ {0,3}</?(?:address|article|aside|blockquote|details|div|dl|fieldset|figure|footer|form|h[1-6]|header|hr|li|main|nav|ol|p|section|table|tbody|td|th|thead|tr|ul)(?:\s|/?>|$)', content, re.I):
             raw = ''  # Ordinary HTML blocks end at a blank line.
+            owner = (depth, list_indent)
             result.append(blank(ln))
             paragraph = False
         else:
+            if not paragraph and content.lstrip().startswith('['):
+                candidate = [content]
+                for following in lines[line_index + 1:]:
+                    q = re.match(r'^(?: {0,3}>[ \t]?)+', following)
+                    qend = q.end() if q else 0
+                    next_content = following[qend:]
+                    if following[:qend].count('>') != depth or not next_content.strip():
+                        break
+                    if list_indent and not next_content.startswith(' ' * list_indent):
+                        break
+                    candidate.append(next_content[list_indent:])
+                definition = reference_definition('\n'.join(candidate))
+                if definition:
+                    label, dest, count = definition
+                    definitions.append((label, line_index + 1, dest))
+                    consumed = line_index + count
+                    result.append(blank(ln))
+                    continue
             result.append(' ' * prefix + content)
             paragraph = bool(content.strip()) and not HEAD.match(content)
     text = '\n'.join(result)
-    return code.sub(lambda m: blank(m.group()) if m[1] else m.group(), text), prefixes
+    return code.sub(lambda m: blank(m.group()) if m[1] else m.group(), text), definitions
 
 
 def link_destinations(lines):
     """Yield original line and destination for inline links and used definitions."""
-    text, prefixes = markdown_text(lines)
+    text, collected = markdown_text(lines)
     normalize = lambda value: ' '.join(markdown_unescape(value).split()).casefold()
-    title = r'(?:"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|\((?:\\.|[^)\\])*\))'
     definitions, used = {}, set()
-    # A line break may wrap a definition, but a blank line cannot join blocks.
-    definition = re.compile(r'^ *\[((?:\\.|[^\]\\])+)\]:', re.M)
-    for match in definition.finditer(text):
-        line = text.count('\n', 0, match.start())
-        if match.start(1) - match.start() - 1 > prefixes[line] + 3:
-            continue
-        found = destination(text, match.end())
-        if not found or re.search(r'\n[ \t]*\n', text[match.start():found[1]]):
-            continue
-        tail = re.match(r'[ \t]*(?:\n[ \t]*(?=' + title + r'))?(?:' + title + r')?[ \t]*(?=\n|$)', text[found[1]:])
-        if tail:
-            definitions.setdefault(normalize(match[1]), (text.count('\n', 0, match.start()) + 1, found[0]))
-            end = found[1] + tail.end()
-            text = text[:match.start()] + re.sub(r'[^\n]', ' ', text[match.start():end]) + text[end:]
+    for label, line, dest in collected:
+        definitions.setdefault(normalize(label), (line, dest))
     # Pair brackets with a stack so nested labels require no recursive parser.
     html_token = re.compile(r"</?[A-Za-z][A-Za-z0-9-]*(?:\s+(?:[^<>\"']|\"[^\"]*\"|'[^']*')*)?\s*/?>")
     pairs, stack, pos = {}, [], 0
@@ -282,7 +311,7 @@ def link_destinations(lines):
         if text[end:end + 1] == '(':
             found = destination(text, end + 1)
             if found:
-                tail = re.match(r'\s*(?:' + title + r')?\s*\)', text[found[1]:])
+                tail = re.match(r'\s*(?:' + TITLE + r')?\s*\)', text[found[1]:])
                 stop = found[1] + tail.end() if tail else end
                 if tail and not re.search(r'\n[ \t]*\n', text[start:stop]):
                     yield text.count('\n', 0, start) + 1, found[0]
@@ -328,8 +357,12 @@ def link_problems(cfg):
         canonical = os.path.realpath(path)
         if not canonical.startswith(ROOT + os.sep) or not os.path.isfile(path):
             continue  # Rendering retains ownership of invalid source diagnostics.
-        with open(path, encoding='utf-8') as source:
-            lines = source.read().split('\n')
+        try:
+            with open(path, encoding='utf-8') as source:
+                lines = source.read().split('\n')
+        except (ValueError, OSError) as error:
+            bad.append(f'{rel}: {error}')
+            continue
         for line, raw in link_destinations(lines):
             dest = unescape(markdown_unescape(raw))
             if re.match(r'^[A-Za-z][A-Za-z0-9+.-]*:', dest) or dest.startswith(('/', '\\', '#', '?')):
