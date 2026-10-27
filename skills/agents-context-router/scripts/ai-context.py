@@ -30,6 +30,10 @@ CFG_PATH = os.path.realpath(os.environ.get('AI_CONTEXT_CONFIG') or os.path.join(
 HEAD = re.compile(r'^(#{1,6})\s+(.+?)\s*#*\s*$')
 FENCE = re.compile(r'^\s{0,3}(`{3,}|~{3,})')
 LINK_FENCE = re.compile(r'^ {0,3}(`{3,}|~{3,})')
+BLOCK_HTML = re.compile(r'^ {0,3}</?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:\s|/?>|$)', re.I)
+THEMATIC = re.compile(r' {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})')
+LIST_MARKER = re.compile(r'^ {0,3}(?:[-+*]|\d+[.)])[ \t]+')
+BLOCK_HEADING = re.compile(r'^ {0,3}#{1,6}(?:[ \t]|$)')
 TITLE = r'(?:"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|\((?:\\.|[^)\\])*\))'
 HTML_TAG = re.compile(r"</?[A-Za-z][A-Za-z0-9-]*(?:\s+(?:[^<>\"']|\"[^\"]*\"|'[^']*')*)?\s*/?>")
 
@@ -189,6 +193,20 @@ def indent_prefix(text, minimum=None, start=0):
     return pos, column - start
 
 
+def title_continuations(lines):
+    """A title continuation cannot consume a line starting a new block."""
+    for line in lines:
+        fence = LINK_FENCE.match(line)
+        if (BLOCK_HEADING.match(line) or THEMATIC.fullmatch(line) or LIST_MARKER.match(line)
+                or re.fullmatch(r' {0,3}(?:=+|-+)[ \t]*', line)
+                or (fence and (fence[1][0] == '~' or '`' not in line[fence.end():]))
+                or BLOCK_HTML.match(line)
+                or re.match(r'^ {0,3}<(?:pre|script|style|textarea)(?:\s|>|$)', line, re.I)
+                or re.match(r'^ {0,3}(?:<!--|<\?|<![A-Z]|<!\[CDATA\[)', line)):
+            return
+        yield line
+
+
 def definition_candidate(lines, index, content, depth, list_indent):
     """Collect only a possible definition and its optional continuation title."""
     candidate = [content]
@@ -230,18 +248,19 @@ def definition_candidate(lines, index, content, depth, list_indent):
         if not tail.startswith(('"', "'", '(')):
             return None
         closing = ')' if tail[0] == '(' else tail[0]
-        for next_line in rest:
+        for next_line in title_continuations(rest):
             candidate.append(next_line)
             if re.search(r'(?<!\\)' + re.escape(closing) + r'[ \t]*$', next_line):
                 break
         return reference_definition('\n'.join(candidate))
     # A title can start on the following line and span more than one line.
-    next_line = next(rest, None)
+    title_rest = iter(title_continuations(rest))
+    next_line = next(title_rest, None)
     if next_line is not None and next_line.lstrip().startswith(('"', "'", '(')):
         candidate.append(next_line)
         closing = ')' if next_line.lstrip()[0] == '(' else next_line.lstrip()[0]
         while not re.search(r'(?<!\\)' + re.escape(closing) + r'[ \t]*$', candidate[-1][1:]):
-            next_line = next(rest, None)
+            next_line = next(title_rest, None)
             if next_line is None:
                 break
             candidate.append(next_line)
@@ -280,8 +299,8 @@ def markdown_text(lines):
             else:
                 paragraph, list_indent = False, 0
         quote_depth = depth
-        thematic = re.fullmatch(r' {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})', content)
-        marker = None if thematic else re.match(r'^ {0,3}(?:[-+*]|\d+[.)])[ \t]+', content)
+        thematic = THEMATIC.fullmatch(content)
+        marker = None if thematic else LIST_MARKER.match(content)
         if marker and not (fence or raw is not None):
             list_indent = len(marker.group().expandtabs(4))
             prefix += marker.end()
@@ -333,7 +352,7 @@ def markdown_text(lines):
                 raw = None
             result.append(blank(ln))
             paragraph = False
-        elif (re.match(r'^ {0,3}</?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:\s|/?>|$)', content, re.I)
+        elif (BLOCK_HTML.match(content)
               or (not paragraph and HTML_TAG.fullmatch(content.strip()))):
             raw = ''  # Ordinary HTML blocks end at a blank line.
             owner = (depth, list_indent)
@@ -349,7 +368,7 @@ def markdown_text(lines):
                     result.append(blank(ln))
                     continue
             result.append(' ' * prefix + content)
-            boundary = (thematic or re.match(r'^ {0,3}#{1,6}(?:[ \t]|$)', content) or
+            boundary = (thematic or BLOCK_HEADING.match(content) or
                         (paragraph and re.fullmatch(r' {0,3}(?:=+|-+)[ \t]*', content)))
             if content.strip():
                 eligible.append((line_index, not paragraph or bool(boundary), bool(boundary), (depth, list_indent)))

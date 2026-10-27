@@ -555,6 +555,18 @@ class LinkCheckTests(unittest.TestCase):
                 self.assertEqual(self.problems(text), [])
 
     def test_backtick_info_and_definition_block_boundaries(self):
+        text = '[id]: existing.md "unfinished\n# Heading\n[broken](missing.md)\nend"\n\n[id]'
+        self.write('wiki/existing.md', '')
+        errors = self.problems(text)
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn('wiki/guide.md:4:', errors[0])
+        self.assertIn('missing.md', errors[0])
+        for title in ['"first\nsecond"', "'first\nsecond'", '(first\nsecond)']:
+            text = '[id]: target.txt ' + title + '\n\n[id]'
+            self.write('wiki/target.txt', '')
+            self.assertEqual(self.problems(text), [])
+            (self.root / 'wiki/target.txt').unlink()
+            self.assertEqual(len(self.problems(text)), 1)
         self.assertEqual(len(self.problems('```foo`bar\n[live](missing.md)')), 1)
         self.assertEqual(self.problems('~~~foo`bar\n[example](missing.md)'), [])
         self.assertEqual(self.problems('paragraph\n[id]: missing.md\n\n[id]'), [])
@@ -749,18 +761,20 @@ class LinkCheckTests(unittest.TestCase):
                 else:
                     self.work += 1
                 return super().__getitem__(index)
-        for kind in ['definitions', 'headings']:
+        for kind in ['definitions', 'headings', 'malformed_titles']:
             for count in [1000, 2000]:
                 with self.subTest(kind=kind, count=count):
                     if kind == 'definitions':
                         text = '\n'.join('[d' + str(i) + ']: target.txt' for i in range(count))
                         text += '\n\n[d' + str(count - 1) + ']'
-                    else:
+                    elif kind == 'headings':
                         text = '\n'.join('# Heading\n[link](target.txt)' for _ in range(count))
+                    else:
+                        text = '\n'.join('[id]: target.txt "unfinished\n# Heading\n[link](target.txt)' for _ in range(count))
                     lines = CountedLines(text.split('\n'))
                     links = list(router.link_destinations(lines))
                     self.assertEqual(len(links), 1 if kind == 'definitions' else count)
-                    self.assertEqual(links[0], (count if kind == 'definitions' else 2, 'target.txt'))
+                    self.assertEqual(links[0], (count if kind == 'definitions' else 3 if kind == 'malformed_titles' else 2, 'target.txt'))
                     self.assertLessEqual(lines.work, 8 * len(lines),
                                          f'{kind}: {lines.work} indexed accesses for {len(lines)} lines')
 
