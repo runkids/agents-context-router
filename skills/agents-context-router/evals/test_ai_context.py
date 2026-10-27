@@ -60,20 +60,27 @@ class CheckTests(unittest.TestCase):
                     self.assertIn('FAIL ' + PAGE, output)
                     for remedy in ['name it in a topic page', 'route it', '"unrouted" with a reason']:
                         self.assertIn(remedy, output)
+        self.write('AGENTS.md', f'`guide`\n{PAGE}\n')
+        renamed = 'projects/api/new-runbook.md'
+        (self.root / PAGE).rename(self.root / renamed)
+        self.assertIn('FAIL ' + renamed, self.check(1))
 
     def test_indexed_references(self):
-        for surface in ['root', 'router', 'topic', 'section', 'source', 'source-section', 'basename', 'relative']:
+        for surface in ['root', 'router', 'topic', 'section', 'source', 'source-section', 'basename', 'relative', 'relative-full']:
             with self.subTest(surface=surface):
                 self.write('AGENTS.md', '`guide`\n' + (PAGE if surface == 'root' else ''))
                 self.cfg['routerFile'] = 'docs/router.md'
                 self.write('docs/router.md', PAGE if surface == 'router' else '')
                 self.write('wiki/guide.md', '# Guide\n' + (
                     'deploy-runbook.md' if surface == 'basename' else
-                    '[Deploy](../api/deploy-runbook.md)' if surface == 'relative' else
+                    f'[Deploy](../{PAGE})' if surface == 'relative-full' else
                     PAGE if surface in ['topic', 'section'] else 'Use this guide.'))
                 sources = [{'path': 'wiki/guide.md'}]
                 if surface == 'section':
                     sources[0]['heading'] = 'Guide'
+                if surface == 'relative':
+                    self.write('projects/api/topic.md', '[Deploy](./deploy-runbook.md)')
+                    sources.append({'path': 'projects/api/topic.md'})
                 if surface in ['source', 'source-section']:
                     sources.append({'path': PAGE})
                     if surface == 'source-section':
@@ -98,15 +105,41 @@ class CheckTests(unittest.TestCase):
                 self.check(code)
 
     def test_indexed_matching(self):
-        self.cfg['indexed'] = ['projects/*', '**/*.md']
-        for path in ['projects/api/readme.txt', 'vendor/orphan.md', '.hidden/orphan.md']:
-            self.write(path, 'Not indexed.\n')
+        self.cfg['indexed'] = ['projects/*/*-runbook.md', '**/*.md', '*.txt']
+        self.write('projects/api/readme.txt', 'Not Markdown.\n')
         output = self.check(1)
         self.assertEqual(output.count('FAIL ' + PAGE + ':'), 1)
         self.assertIn('1 problem(s)', output)
         if os.name == 'posix':
             self.cfg['indexed'] = ['PROJECTS/*.md']
             self.check(0)
+
+    def test_indexed_traversal_preserves_legacy_scope(self):
+        self.write('.git/internal/runbook.md', 'Git metadata.\n')
+        for prefix in ['.internal', 'vendor', 'build']:
+            with self.subTest(prefix=prefix):
+                page = f'{prefix}/api/deploy-runbook.md'
+                for path in [page, f'{prefix}/AGENTS.md', f'{prefix}/wiki/extra.md',
+                             f'{prefix}/wiki/history/m1.md']:
+                    self.write(path, '# Extra\n')
+                self.cfg.update(wikiDir=f'{prefix}/wiki', historyDir=f'{prefix}/wiki/history')
+                self.write('AGENTS.md', '`guide`\n')
+                self.cfg.pop('indexed', None)
+                self.check(0)
+                self.cfg['indexed'] = []
+                self.check(0)
+                self.cfg['indexed'] = [f'{prefix}/api/*-runbook.md', '.git/**/*.md']
+                output = self.check(1)
+                self.assertIn('FAIL ' + page, output)
+                self.assertIn('1 problem(s)', output)
+                self.write('AGENTS.md', f'`guide`\n{page}\n')
+                self.check(0)
+
+    def test_invalid_indexed(self):
+        for value in ['projects/*.md', None, [123], {'projects/*.md': True}]:
+            with self.subTest(value=value):
+                self.cfg['indexed'] = value
+                self.assertIn('FAIL indexed: expected a list of strings', self.check(1))
 
     def test_existing_orphan_rules(self):
         for path, detail in [('wiki/extra.md', 'wiki page no topic loads'),

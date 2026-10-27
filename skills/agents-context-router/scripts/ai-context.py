@@ -79,6 +79,9 @@ def render(cfg, name):
 
 def orphans(cfg, reference_text=''):
     """Docs that exist on disk but that no agent can reach through the router."""
+    indexed = cfg.get('indexed', [])
+    if not isinstance(indexed, list) or any(not isinstance(p, str) for p in indexed):
+        return ['indexed: expected a list of strings']
     wiki = cfg.get('wikiDir', 'wiki')
     history = cfg.get('historyDir', f'{wiki}/history')
     router = cfg.get('routerFile', f'{wiki}/README.md')
@@ -87,11 +90,11 @@ def orphans(cfg, reference_text=''):
     allowed = {p.replace('\\', '/'): reason for p, reason in cfg.get('unrouted', {}).items()}
     router_text = open(os.path.join(ROOT, router), encoding='utf-8').read() if os.path.exists(os.path.join(ROOT, router)) else ''
     reference_text += '\n' + router_text
-    indexed = cfg.get('indexed', [])
     bad = []
     skip = {'.git', 'node_modules', 'dist', 'build', 'vendor', '.venv', 'target'}
     for d, dirs, files in os.walk(ROOT):
-        dirs[:] = [x for x in dirs if x not in skip and not x.startswith('.')]
+        dirs[:] = [x for x in dirs if x != '.git' and
+                   (indexed or (x not in skip and not x.startswith('.')))]
         for f in files:
             rel = os.path.relpath(os.path.join(d, f), ROOT).replace(os.sep, '/')
             if not f.endswith('.md'):
@@ -101,7 +104,8 @@ def orphans(cfg, reference_text=''):
                     and rel not in routed and rel not in reference_text
                     and not (isinstance(reason, str) and reason.strip())):
                 bad.append(f'{rel}: indexed page not named (name it in a topic page, route it, or list it under "unrouted" with a reason)')
-            if rel in allowed or any(fnmatch.fnmatchcase(rel, p) for p in allowed):
+            if (rel in allowed or any(fnmatch.fnmatchcase(rel, p) for p in allowed)
+                    or any(x in skip or x.startswith('.') for x in rel.split('/')[:-1])):
                 continue
             if rel.startswith(history + '/'):
                 if os.path.relpath(rel, wiki).replace(os.sep, '/') not in router_text and rel not in router_text:
