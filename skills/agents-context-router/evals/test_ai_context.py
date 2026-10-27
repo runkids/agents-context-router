@@ -472,6 +472,37 @@ class LinkCheckTests(unittest.TestCase):
         self.assertEqual(self.problems('[x](\n\nmissing.md)\n[id]:\n\nmissing.md'), [])
 
     def test_context_masks_examples_but_keeps_live_continuations(self):
+        for opening, continuation in [('-\t> ```', '\t> '), ('- > ```', '  > ')]:
+            text = opening + '\n' + continuation + '[example](missing.md)\n' + continuation + '```\n\n[live](live-missing.md)'
+            errors = self.problems(text)
+            self.assertEqual(len(errors), 1, errors)
+            self.assertIn('live-missing.md', errors[0])
+        text = '- > [id]:\n  > target.txt\n  >\n  > [id]'
+        self.write('wiki/target.txt', '')
+        self.assertEqual(self.problems(text), [])
+        (self.root / 'wiki/target.txt').unlink()
+        self.assertEqual(len(self.problems(text)), 1)
+        self.assertEqual(len(self.problems('- > note\n  > [live](missing.md)')), 1)
+        self.assertEqual(len(self.problems('- > [x\n  > y](missing.md)')), 1)
+        for continuation in ['  ', '> ']:
+            text = '- > ```\n' + continuation + '[live](missing.md)'
+            self.assertEqual(len(self.problems(text)), 1, text)
+        for depth in range(1, 6):
+            opening, continuation = '-\t> ' * depth, '\t> ' * depth
+            text = opening + '```\n' + continuation + '[example](missing.md)\n' + continuation + '```\n\n[live](live-missing.md)'
+            errors = self.problems(text)
+            self.assertEqual(len(errors), 1, errors)
+            self.assertIn('live-missing.md', errors[0])
+        for depth in range(1, 6):
+            for prefix in ['', '> ']:
+                opening = prefix + '- > ' * depth + '```'
+                continuation = prefix + '  > ' * depth
+                text = opening + '\n' + continuation + '[example](missing.md)\n' + continuation + '```\n\n[live](live-missing.md)'
+                with self.subTest(alternating_depth=depth, prefix=prefix):
+                    errors = self.problems(text)
+                    self.assertEqual(len(errors), 1, errors)
+                    self.assertIn('live-missing.md', errors[0])
+                    self.assertIn('wiki/guide.md:6:', errors[0])
         for example in ['-\t- ```\n      [example](missing.md)\n      ```',
                         '-\t  - [example](missing.md)', '- - ***']:
             errors = self.problems(example + '\n\n[live](live-missing.md)')
@@ -618,6 +649,25 @@ class LinkCheckTests(unittest.TestCase):
             self.assertEqual(self.problems(code), [])
 
     def test_entities_decode_before_url_classification(self):
+        cases = [('file&copy.txt', 'file&copy.txt', 'file©.txt'),
+                 ('file&#65.txt', 'file&', 'fileA.txt'),
+                 ('file&copy;.txt', 'file©.txt', 'file&copy;.txt'),
+                 ('file&#65;.txt', 'fileA.txt', 'file&#65;.txt'),
+                 ('file&amp;copy;.txt', 'file&copy;.txt', 'file©.txt'),
+                 (r'file\&copy;.txt', 'file&copy;.txt', 'file©.txt'),
+                 ('file&#00000065;.txt', 'file&', 'fileA.txt'),
+                 ('file&notreal;.txt', 'file&notreal;.txt', 'file¬real;.txt'),
+                 ('file&copycat;.txt', 'file&copycat;.txt', 'file©cat;.txt')]
+        for raw, expected, decoy in cases:
+            for template in ['[x]({})', '[id]: {}\n\n[id]']:
+                with self.subTest(raw=raw, template=template):
+                    text = template.format(raw)
+                    self.write('wiki/' + expected, '')
+                    self.assertEqual(self.problems(text), [])
+                    (self.root / 'wiki' / expected).unlink()
+                    self.write('wiki/' + decoy, '')
+                    self.assertEqual(len(self.problems(text)), 1, text)
+                    (self.root / 'wiki' / decoy).unlink()
         for name, dest in [('a&b.md', 'a&amp;b.md'), ('#.md', '&#35;.md'),
                            ('a b.md', 'a&#32;b.md'), ('a&b.md', 'a&#38;b.md')]:
             with self.subTest(dest=dest):

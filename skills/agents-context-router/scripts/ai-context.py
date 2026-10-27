@@ -24,6 +24,7 @@ No dependencies beyond the Python 3.8+ standard library.
 import fnmatch, json, os, re, sys
 from urllib.parse import unquote
 from html import unescape
+from html.entities import html5
 
 ROOT = os.path.realpath(os.environ.get('AI_CONTEXT_ROOT') or os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CFG_PATH = os.path.realpath(os.environ.get('AI_CONTEXT_CONFIG') or os.path.join(ROOT, 'wiki', 'ai-context.json'))
@@ -141,8 +142,19 @@ def orphans(cfg, reference_text=''):
     return bad
 
 
+MARKDOWN_ESCAPE = re.compile(r'\\([' + re.escape(PUNCTUATION) + r'])|&(?:\#(?:[xX][0-9A-Fa-f]{1,6}|[0-9]{1,7})|[A-Za-z][A-Za-z0-9]{1,31});')
+
+
+def decode_markdown_token(match):
+    """Decode a Markdown escape or a complete, recognized character reference."""
+    token = match.group()
+    if match.group(1):
+        return match.group(1)
+    return unescape(token) if token.startswith('&#') or token[1:] in html5 else token
+
+
 def markdown_unescape(value):
-    return re.sub(r'\\([!"#$%&\'()*+,\-./:;<=>?@\[\]\\^_`{|}~])', r'\1', value)
+    return MARKDOWN_ESCAPE.sub(decode_markdown_token, value)
 
 
 def destination(text, start, end=None):
@@ -243,7 +255,7 @@ def definition_candidate(lines, index, content, depth, list_indent):
     candidate = [content]
     def following():
         for following_index in range(index + 1, len(lines)):
-            line = lines[following_index]
+            line = container_prefix(lines[following_index], list_indent)
             quote = re.match(r'^(?: {0,3}>[ \t]?)+', line)
             end = quote.end() if quote else 0
             text = line[end:]
@@ -303,6 +315,52 @@ def definition_candidate(lines, index, content, depth, list_indent):
     return definition
 
 
+def container_prefix(line, list_indent):
+    """Put quote markers before list prefixes while retaining source offsets."""
+    pos, quotes, lists, saw_list, nested, indentation = 0, [], [], False, False, 0
+    while pos < len(line):
+        start = pos
+        while pos < len(line) and line[pos] in ' \t':
+            pos += 1
+        space = line[start:pos]
+        indentation += indent_prefix(space)[1]
+        if line[pos:pos + 1] == '>':
+            nested |= saw_list or (list_indent > 0 and indentation >= list_indent)
+            end = pos + 1
+            if line[end:end + 1] in (' ', '\t'):
+                end += 1
+            quotes.append(line[pos:end])
+            lists.append(space)
+            pos = end
+        else:
+            match = LIST_MARKER.match(line[pos:])
+            if not match or (not saw_list and not quotes and indent_prefix(space)[1] >= 4):
+                pos = start
+                break
+            end, _, _, extra = list_padding(line[pos:], match, len(line[:pos].expandtabs(4)))
+            lists.append(space + line[pos:pos + end])
+            saw_list, pos = True, pos + end
+            if extra or end < match.end():
+                break
+    return ''.join(quotes + lists) + line[pos:] if nested else line
+
+
+def block_regions(result, eligible):
+    """Combine adjacent eligible lines belonging to the same paragraph."""
+    offsets = [0]
+    for ln in result:
+        offsets.append(offsets[-1] + len(ln) + 1)
+    regions, previous, ended = [], -2, True
+    for index, starts, ends in eligible:
+        end = offsets[index] + len(result[index])
+        if index == previous + 1 and not starts and not ended:
+            regions[-1] = (regions[-1][0], end, regions[-1][2])
+        else:
+            regions.append((offsets[index], end, index + 1))
+        previous, ended = index, ends
+    return regions
+
+
 def markdown_text(lines):
     """Mask inactive Markdown contexts without changing offsets or line numbers."""
     blank = lambda value: re.sub(r'[^\n]', ' ', value)
@@ -314,6 +372,7 @@ def markdown_text(lines):
         if line_index < consumed:
             result.append(blank(ln))
             continue
+        ln = container_prefix(ln, list_indent)
         quote = re.match(r'^(?: {0,3}>[ \t]?)+', ln)
         prefix = quote.end() if quote else 0
         depth = ln[:prefix].count('>')
@@ -407,18 +466,7 @@ def markdown_text(lines):
             if content.strip():
                 eligible.append((line_index, not paragraph or bool(boundary), bool(boundary)))
             paragraph = bool(content.strip()) and not boundary
-    offsets = [0]
-    for ln in result:
-        offsets.append(offsets[-1] + len(ln) + 1)
-    regions, previous, ended = [], -2, True
-    for index, starts, ends in eligible:
-        end = offsets[index] + len(result[index])
-        if index == previous + 1 and not starts and not ended:
-            regions[-1] = (regions[-1][0], end, regions[-1][2])
-        else:
-            regions.append((offsets[index], end, index + 1))
-        previous, ended = index, ends
-    return '\n'.join(result), definitions, regions
+    return '\n'.join(result), definitions, block_regions(result, eligible)
 
 
 def link_destinations(lines):
@@ -561,7 +609,7 @@ def link_problems(cfg):
             bad.append(f'{rel}: {error}')
             continue
         for line, raw in link_destinations(lines):
-            dest = unescape(markdown_unescape(raw))
+            dest = markdown_unescape(raw)
             if re.match(r'^[A-Za-z][A-Za-z0-9+.-]*:', dest) or dest.startswith(('/', '\\', '#', '?')):
                 continue
             dest = unquote(re.split(r'[?#]', dest, maxsplit=1)[0])
