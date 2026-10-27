@@ -207,6 +207,14 @@ def list_padding(content, marker, base=0):
     return start + 1, base + start + 1, base + start + first_columns, first_columns - 1
 
 
+def list_interrupts(content, marker):
+    """A new list interrupts a paragraph only with content and start number 1."""
+    if not content[marker.end():].strip():
+        return False
+    ordered = re.match(r'(\d+)[.)]', content.lstrip())
+    return not ordered or ordered[1].lstrip('0') == '1'
+
+
 def title_continuations(lines):
     """A title continuation cannot consume a line starting a new block."""
     for line in lines:
@@ -320,6 +328,7 @@ def markdown_text(lines):
             fence, raw, paragraph = None, None, False
         if depth != quote_depth and not (paragraph and depth < quote_depth and content.strip()):
             paragraph, list_indent, quote_depth = False, 0, depth
+        sibling = bool(list_indent and indentation < list_indent)
         if list_indent:
             characters, columns = indent_prefix(content, list_indent)
             if columns >= list_indent:
@@ -330,7 +339,8 @@ def markdown_text(lines):
                 list_indent = 0
         thematic = THEMATIC.fullmatch(content)
         marker = None if thematic else LIST_MARKER.match(content)
-        if marker and not (fence or raw is not None):
+        if (marker and not (fence or raw is not None) and
+                (not paragraph or sibling or list_interrupts(content, marker))):
             end, list_indent, base_column, extra_indent = list_padding(content, marker, base_column)
             prefix += end
             content = ln[prefix:]

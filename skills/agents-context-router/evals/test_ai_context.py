@@ -457,6 +457,28 @@ class LinkCheckTests(unittest.TestCase):
         self.assertEqual(self.problems('[x](\n\nmissing.md)\n[id]:\n\nmissing.md'), [])
 
     def test_context_masks_examples_but_keeps_live_continuations(self):
+        for start in [0, 1, 2, 10]:
+            for quote in ['', '> ']:
+                text = quote + 'See [the\n' + quote + str(start) + '. guide](target.txt)'
+                self.write('wiki/target.txt', '')
+                self.assertEqual(self.problems(text), [])
+                (self.root / 'wiki/target.txt').unlink()
+                self.assertEqual(len(self.problems(text)), int(start != 1), text)
+                block = str(start) + '. [live](target.txt)'
+                self.assertEqual(len(self.problems(block)), 1, block)
+        for marker in ['1. ', '2. ', '+ ', '* ']:
+            text = 'See [the\n' + marker + '\nguide](target.txt)'
+            self.assertEqual(len(self.problems(text)), 1, text)
+        self.assertEqual(self.problems('See [the\n- \nguide](target.txt)'), [])
+        for first in ['1. ', '- ']:
+            for next_marker in ['2. ', '3. ', '2. \n']:
+                text = first + '[the\n' + next_marker + 'guide](target.txt)\n\n[live](missing.md)'
+                errors = self.problems(text)
+                self.assertEqual(len(errors), 1, errors)
+                self.assertIn('missing.md', errors[0])
+        for first in ['1. ', '- ']:
+            text = first + '[the\n' + ' ' * len(first) + '2. guide](target.txt)'
+            self.assertEqual(len(self.problems(text)), 1, text)
         for depth in range(1, 6):
             for markers in itertools.product(['- ', '1. '], repeat=depth):
                 indent, lines = '', []
