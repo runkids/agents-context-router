@@ -273,6 +273,17 @@ class LinkCheckTests(unittest.TestCase):
                          '<!-- wiki/guide.md § Selected -->\n# Selected\nHello\n')
 
     def test_inline_destinations_and_titles(self):
+        for whitespace in [' ', '\t', '\n']:
+            text = '[x](a' + '\\' + whitespace + 'b)'
+            with self.subTest(whitespace=repr(whitespace)):
+                self.assertEqual(self.problems(text), [])
+        for raw, name in [('a<b', 'a<b'), ('a' + '\\' + 'zb', 'a' + '\\' + 'zb'),
+                          (r'a\(b\)', 'a(b)')]:
+            with self.subTest(destination=raw):
+                self.write('wiki/' + name, '')
+                self.assertEqual(self.problems('[x](' + raw + ')'), [])
+                (self.root / 'wiki' / name).unlink()
+                self.assertEqual(len(self.problems('[x](' + raw + ')')), 1)
         for title in ['"title"', "'title'", '(title)']:
             text = '[x](<target.txt>' + title + ')'
             self.write('wiki/target.txt', '')
@@ -318,6 +329,14 @@ class LinkCheckTests(unittest.TestCase):
                 (self.root / 'wiki' / name).unlink()
 
     def test_used_references_report_definition_once(self):
+        for whitespace in [' ', '\t']:
+            text = '[id]: a' + '\\' + whitespace + 'b\n\n[id]'
+            self.assertEqual(self.problems(text), [], text)
+        text = '[id]: a' + '\\' + '\nb\n\n[id]'
+        self.write('wiki/a' + '\\', '')
+        self.assertEqual(self.problems(text), [])
+        (self.root / ('wiki/a' + '\\')).unlink()
+        self.assertEqual(len(self.problems(text)), 1)
         for title in ['"title"', "'title'", '(title)']:
             text = '[x]: <target.txt>' + title + '\n\n[x]'
             self.write('wiki/target.txt', '')

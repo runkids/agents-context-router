@@ -154,7 +154,7 @@ def destination(text, start, end=None):
     begin = pos
     while pos < end:
         char = text[pos]
-        if char == '\\' and pos + 1 < end:
+        if char == '\\' and pos + 1 < end and text[pos + 1] in PUNCTUATION:
             pos += 2
             continue
         if angle:
