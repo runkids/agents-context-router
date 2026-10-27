@@ -56,6 +56,10 @@ Leave volatile state out of the docs: progress counts, who is doing what this we
 
   A deliberate exception goes under `"unrouted"` in the JSON, with a reason, including scoped instructions agents already load by cwd. Keys accept exact paths or case-sensitive fnmatch globs; backslashes normalize to `/`. For example, `"projects/*/AGENTS.md": "Loaded by cwd."` matches both `projects/api/AGENTS.md` and `projects/team/api/AGENTS.md`: `*` crosses `/`, and `**` has no special recursive meaning. `?` and bracket classes also work. Keys match themselves and also act as patterns, regardless of file existence: `wiki/file[1].md` exempts both itself and `wiki/file1.md`. Use `wiki/file[[]1].md` to exempt the literal bracketed filename without also exempting `wiki/file1.md`. Unmatched orphans still fail.
 
+Optional `"indexed"` patterns (default `[]`) check discovery of `.md` pages anywhere in the existing traversal, for example `"indexed": ["projects/*/*-runbook.md"]`. Use forward-slash repo-relative patterns. Python `fnmatch` lets `*` cross `/`; matching is case-sensitive on POSIX and follows platform normalization on Windows.
+
+An indexed page must be a topic source, including a heading-selected source, or have its full repo-relative path named in root instructions, the configured router file, or a topic's successfully rendered text. Only selected sections count, and a basename or relative link without the full string does not. Fix a failure by naming the path in a topic page, routing the page as a source, or listing its exact path under `"unrouted"` with a nonblank reason. Exception keys are exact paths, not globs. These references do not exempt pages from the existing wiki, history, or nested-instructions rules.
+
 `check` runs in CI, so drift fails the build instead of rotting quietly.
 
 ## Skills
