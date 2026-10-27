@@ -457,6 +457,17 @@ class LinkCheckTests(unittest.TestCase):
         self.assertEqual(self.problems('[x](\n\nmissing.md)\n[id]:\n\nmissing.md'), [])
 
     def test_context_masks_examples_but_keeps_live_continuations(self):
+        for digits, valid in [('0' * (length - 1) + '1', length <= 9) for length in range(1, 11)] + [('١', False)]:
+            with self.subTest(digits=digits):
+                text = 'See [the\n' + digits + '. guide](target.txt)'
+                self.write('wiki/target.txt', '')
+                self.assertEqual(self.problems(text), [])
+                (self.root / 'wiki/target.txt').unlink()
+                self.assertEqual(len(self.problems(text)), int(not valid), text)
+                sibling = '- [the\n' + digits + '. guide](target.txt)'
+                self.assertEqual(len(self.problems(sibling)), int(not valid), sibling)
+                block = digits + '. [live](target.txt)'
+                self.assertEqual(len(self.problems(block)), 1, block)
         for first, sibling in [('+', '+'), ('*', '*'), ('1.', '1.'), ('1.', '2.')]:
             for padding in ['', ' ']:
                 with self.subTest(first=first, sibling=sibling, padding=padding):

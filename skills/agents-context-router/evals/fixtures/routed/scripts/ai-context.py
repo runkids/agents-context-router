@@ -32,7 +32,7 @@ FENCE = re.compile(r'^\s{0,3}(`{3,}|~{3,})')
 LINK_FENCE = re.compile(r'^ {0,3}(`{3,}|~{3,})')
 BLOCK_HTML = re.compile(r'^ {0,3}</?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:\s|/?>|$)', re.I)
 THEMATIC = re.compile(r' {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})')
-LIST_MARKER = re.compile(r'^ {0,3}(?:[-+*]|\d+[.)])(?:[ \t]+|$)')
+LIST_MARKER = re.compile(r'^ {0,3}(?:[-+*]|[0-9]{1,9}[.)])(?:[ \t]+|$)')
 BLOCK_HEADING = re.compile(r'^ {0,3}#{1,6}(?:[ \t]|$)')
 TITLE = r'(?:"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|\((?:\\.|[^)\\])*\))'
 HTML_ATTRIBUTE = r"[A-Za-z_:][A-Za-z0-9_.:-]*(?:[ \t\r\n]*=[ \t\r\n]*(?:[^ \t\r\n\"'=<>`]+|'[^']*'|\"[^\"]*\"))?"
@@ -199,7 +199,7 @@ def indent_prefix(text, minimum=None, start=0):
 
 def list_padding(content, marker, base=0):
     """Return marker prefix, list indentation, and any partially consumed tab."""
-    start = re.match(r'^ {0,3}(?:[-+*]|\d+[.)])', content).end()
+    start = re.match(r'^ {0,3}(?:[-+*]|[0-9]{1,9}[.)])', content).end()
     padding, columns = indent_prefix(content[start:marker.end()], start=base + start)
     if columns <= 4:
         return marker.end(), base + start + max(columns, 1), base + start + columns, 0
@@ -211,7 +211,7 @@ def list_interrupts(content, marker):
     """A new list interrupts a paragraph only with content and start number 1."""
     if not content[marker.end():].strip():
         return False
-    ordered = re.match(r'(\d+)[.)]', content.lstrip())
+    ordered = re.match(r'([0-9]{1,9})[.)]', content.lstrip())
     return not ordered or ordered[1].lstrip('0') == '1'
 
 
