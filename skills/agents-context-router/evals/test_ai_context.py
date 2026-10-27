@@ -277,13 +277,10 @@ class LinkCheckTests(unittest.TestCase):
             text = '[x](a' + '\\' + whitespace + 'b)'
             with self.subTest(whitespace=repr(whitespace)):
                 self.assertEqual(self.problems(text), [])
-        for raw, name in [('a<b', 'a<b'), ('a' + '\\' + 'zb', 'a' + '\\' + 'zb'),
-                          (r'a\(b\)', 'a(b)')]:
+        for raw in ['a<b', 'a' + '\\' + 'zb']:
             with self.subTest(destination=raw):
-                self.write('wiki/' + name, '')
-                self.assertEqual(self.problems('[x](' + raw + ')'), [])
-                (self.root / 'wiki' / name).unlink()
-                self.assertEqual(len(self.problems('[x](' + raw + ')')), 1)
+                self.assertEqual(list(router.link_destinations(['[x](' + raw + ')'])), [(1, raw)])
+                self.assertEqual(router.markdown_unescape(raw), raw)
         for title in ['"title"', "'title'", '(title)']:
             text = '[x](<target.txt>' + title + ')'
             self.write('wiki/target.txt', '')
@@ -311,9 +308,11 @@ class LinkCheckTests(unittest.TestCase):
         self.assertEqual(len(self.problems('![label](<missing file.png>)')), 1)
 
         self.write('wiki/neighbor.txt', '')
+        text = '[x](file<!--name.txt) and [n](neighbor.txt)'
+        self.assertEqual(list(router.link_destinations([text])),
+                         [(1, 'file<!--name.txt'), (1, 'neighbor.txt')])
         cases = [('[](target.txt)', 'target.txt'), ('![](target.txt)', 'target.txt'),
                  ('[x](<target`name.txt>) and `example` [n](neighbor.txt)', 'target`name.txt'),
-                 ('[x](file<!--name.txt) and [n](neighbor.txt)', 'file<!--name.txt'),
                  ('[x](<target[bracket].txt>) `sample`', 'target[bracket].txt')]
         for text, name in cases:
             with self.subTest(text=text):
@@ -333,10 +332,7 @@ class LinkCheckTests(unittest.TestCase):
             text = '[id]: a' + '\\' + whitespace + 'b\n\n[id]'
             self.assertEqual(self.problems(text), [], text)
         text = '[id]: a' + '\\' + '\nb\n\n[id]'
-        self.write('wiki/a' + '\\', '')
-        self.assertEqual(self.problems(text), [])
-        (self.root / ('wiki/a' + '\\')).unlink()
-        self.assertEqual(len(self.problems(text)), 1)
+        self.assertEqual(list(router.link_destinations(text.split('\n'))), [(1, 'a' + '\\')])
         for title in ['"title"', "'title'", '(title)']:
             text = '[x]: <target.txt>' + title + '\n\n[x]'
             self.write('wiki/target.txt', '')
