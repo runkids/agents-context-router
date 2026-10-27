@@ -42,11 +42,11 @@ PUNCTUATION = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'
 BACKTICKS = re.compile(r'`+')
 BLANK_LINE = re.compile(r'\n[ \t]*\n')
 WHITESPACE = re.compile(r'[ \t\r\n]*')
-INLINE_END = re.compile(r'\s*(?:' + TITLE + r')?\s*\)')
+INLINE_END = re.compile(r'(?:\s+' + TITLE + r')?\s*\)')
 AUTOLINK = re.compile(r'<(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\x00-\x20]*|[A-Za-z0-9.!#$%&\'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+)>')
 INLINE_HTML = re.compile(r'<!--(?:(?!-->)[\s\S])*-->|<\?[\s\S]*?\?>|<![A-Z][\s\S]*?>|<!\[CDATA\[[\s\S]*?\]\]>|' + HTML_TAG.pattern)
 DEFINITION_START = re.compile(r'^ {0,3}\[((?:\\.|[^\]\\])+)\]:')
-DEFINITION_END = re.compile(r'[ \t]*(?:\n[ \t]*(?=' + TITLE + r'))?(?:' + TITLE + r')?[ \t]*(?:\n|$)')
+DEFINITION_END = re.compile(r'(?:(?=[ \t\n])[ \t]*(?:\n[ \t]*)?' + TITLE + r')?[ \t]*(?:\n|$)')
 
 
 def load_cfg():

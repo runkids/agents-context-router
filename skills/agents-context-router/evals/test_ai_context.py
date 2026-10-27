@@ -273,6 +273,20 @@ class LinkCheckTests(unittest.TestCase):
                          '<!-- wiki/guide.md § Selected -->\n# Selected\nHello\n')
 
     def test_inline_destinations_and_titles(self):
+        for title in ['"title"', "'title'", '(title)']:
+            text = '[x](<target.txt>' + title + ')'
+            self.write('wiki/target.txt', '')
+            self.assertEqual(self.problems(text), [])
+            (self.root / 'wiki/target.txt').unlink()
+            self.assertEqual(self.problems(text), [])
+            for separator in [' ', '\t', '\n']:
+                live = '[x](<target.txt>' + separator + title + ')'
+                self.write('wiki/target.txt', '')
+                self.assertEqual(self.problems(live), [])
+                (self.root / 'wiki/target.txt').unlink()
+                self.assertEqual(len(self.problems(live)), 1)
+        self.assertEqual(self.problems('[x]() [x](<>) [x](<> "")'), [])
+        self.assertEqual(len(self.problems('[x](<target.txt>)')), 1)
         for destination in ['a(b).md', r'a\(b\).md', '<space name.md>',
                             'a(b).md "title"', "a(b).md 'title'", 'a(b).md (title)']:
             for mark in ['[link]', '![image]']:
@@ -304,6 +318,20 @@ class LinkCheckTests(unittest.TestCase):
                 (self.root / 'wiki' / name).unlink()
 
     def test_used_references_report_definition_once(self):
+        for title in ['"title"', "'title'", '(title)']:
+            text = '[x]: <target.txt>' + title + '\n\n[x]'
+            self.write('wiki/target.txt', '')
+            self.assertEqual(self.problems(text), [])
+            (self.root / 'wiki/target.txt').unlink()
+            self.assertEqual(self.problems(text), [])
+            for separator in [' ', '\t', '\n']:
+                live = '[x]: <target.txt>' + separator + title + '\n\n[x]'
+                self.write('wiki/target.txt', '')
+                self.assertEqual(self.problems(live), [])
+                (self.root / 'wiki/target.txt').unlink()
+                self.assertEqual(len(self.problems(live)), 1)
+        self.assertEqual(self.problems('[x]: <> ""\n\n[x]'), [])
+        self.assertEqual(len(self.problems('[x]: <target.txt>\n\n[x]')), 1)
         for slashes, matched in [(1, True), (2, False), (3, True)]:
             label = '[foo' + '\\' * slashes + ']\nbar]'
             text = label + ': target.txt\n\n' + label
