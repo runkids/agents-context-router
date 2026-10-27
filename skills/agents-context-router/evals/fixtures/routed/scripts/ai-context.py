@@ -38,8 +38,8 @@ def load_cfg():
         return json.load(f)
 
 
-def unfenced(lines):
-    """Yield original indexes and lines outside fenced code."""
+def headings(lines):
+    """Yield (index, level, text), skipping headings inside fenced code (e.g. shell comments)."""
     fence = None
     for i, ln in enumerate(lines):
         m = FENCE.match(ln)
@@ -50,14 +50,7 @@ def unfenced(lines):
             elif mark.startswith(fence):
                 fence = None
             continue
-        if fence is None:
-            yield i, ln
-
-
-def headings(lines):
-    """Yield (index, level, text), skipping fenced code (e.g. shell comments)."""
-    for i, ln in unfenced(lines):
-        if h := HEAD.match(ln):
+        if fence is None and (h := HEAD.match(ln)):
             yield i, len(h.group(1)), h.group(2)
 
 
@@ -163,10 +156,10 @@ def destination(text, start):
 def markdown_text(lines):
     """Mask inactive Markdown contexts without changing offsets or line numbers."""
     blank = lambda value: re.sub(r'[^\n]', ' ', value)
-    code = re.compile(r'\\[^\n]|(?<!`)(`+)(?!`)([\s\S]*?)(?<!`)\1(?!`)')
+    code = re.compile(r'\\[^\n]|(?<!`)(`+)(?!`)((?:(?!\n[ \t]*\n)[\s\S])*?)(?<!`)\1(?!`)')
     original = '\n'.join(lines)
     protected = code.sub(lambda m: blank(m.group()) if m[1] else m.group(), original).split('\n')
-    result = []
+    result, prefixes = [], []
     fence, raw, comment = None, None, False
     paragraph, list_indent, quote_depth = False, 0, 0
     for line_index, ln in enumerate(lines):
@@ -190,11 +183,12 @@ def markdown_text(lines):
                 content = ln[prefix:]
             elif content.strip():
                 list_indent = 0
+        prefixes.append(prefix)
         indent = len(content.expandtabs(4)) - len(content.expandtabs(4).lstrip(' '))
         mark = FENCE.match(content)
         if fence:
             result.append(blank(ln))
-            if mark and mark[1].startswith(fence):
+            if mark and mark[1].startswith(fence) and not content[mark.end():].strip():
                 fence = None
             paragraph = False
             continue
@@ -240,18 +234,21 @@ def markdown_text(lines):
             result.append(' ' * prefix + content)
             paragraph = bool(content.strip()) and not HEAD.match(content)
     text = '\n'.join(result)
-    return code.sub(lambda m: blank(m.group()) if m[1] else m.group(), text)
+    return code.sub(lambda m: blank(m.group()) if m[1] else m.group(), text), prefixes
 
 
 def link_destinations(lines):
     """Yield original line and destination for inline links and used definitions."""
-    text = markdown_text(lines)
+    text, prefixes = markdown_text(lines)
     normalize = lambda value: ' '.join(markdown_unescape(value).split()).casefold()
     title = r'(?:"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|\((?:\\.|[^)\\])*\))'
     definitions, used = {}, set()
     # A line break may wrap a definition, but a blank line cannot join blocks.
-    definition = re.compile(r'^ {0,3}\[((?:\\.|[^\]\\])+)\]:', re.M)
+    definition = re.compile(r'^ *\[((?:\\.|[^\]\\])+)\]:', re.M)
     for match in definition.finditer(text):
+        line = text.count('\n', 0, match.start())
+        if match.start(1) - match.start() - 1 > prefixes[line] + 3:
+            continue
         found = destination(text, match.end())
         if not found or re.search(r'\n[ \t]*\n', text[match.start():found[1]]):
             continue
@@ -261,10 +258,14 @@ def link_destinations(lines):
             end = found[1] + tail.end()
             text = text[:match.start()] + re.sub(r'[^\n]', ' ', text[match.start():end]) + text[end:]
     # Pair brackets with a stack so nested labels require no recursive parser.
+    html_token = re.compile(r"</?[A-Za-z][A-Za-z0-9-]*(?:\s+(?:[^<>\"']|\"[^\"]*\"|'[^']*')*)?\s*/?>")
     pairs, stack, pos = {}, [], 0
     while pos < len(text):
         if text[pos] == '\\':
             pos += 2
+            continue
+        if text[pos] == '<' and (token := html_token.match(text, pos)):
+            pos = token.end()
             continue
         if text[pos] == '[':
             stack.append(pos)
@@ -321,13 +322,12 @@ def link_problems(cfg):
                         paths.add(os.path.relpath(entry.path, ROOT))
         except OSError:
             continue
-    bad, seen = [], set()
-    for rel in sorted({os.path.normpath(p) for p in paths}):
-        path = os.path.abspath(os.path.join(ROOT, rel))
+    bad = []
+    for path in sorted({os.path.abspath(os.path.join(ROOT, p)) for p in paths}):
+        rel = os.path.relpath(path, ROOT)
         canonical = os.path.realpath(path)
-        if path in seen or not canonical.startswith(ROOT + os.sep) or not os.path.isfile(path):
+        if not canonical.startswith(ROOT + os.sep) or not os.path.isfile(path):
             continue  # Rendering retains ownership of invalid source diagnostics.
-        seen.add(path)
         with open(path, encoding='utf-8') as source:
             lines = source.read().split('\n')
         for line, raw in link_destinations(lines):

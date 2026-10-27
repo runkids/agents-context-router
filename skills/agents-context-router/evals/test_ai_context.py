@@ -459,6 +459,50 @@ class LinkCheckTests(unittest.TestCase):
         self.assertEqual(len(errors), 5, errors)
         self.assertTrue(any('wiki/guides/page.md:1:' in error for error in errors))
 
+    def test_nested_container_definitions_and_absolute_source_dedup(self):
+        for text in ['- item\n  - [id]: target.txt\n\n    [id]',
+                     '> - item\n>   - [id]: target.txt\n>\n>     [id]']:
+            with self.subTest(text=text):
+                self.write('wiki/target.txt', '')
+                self.assertEqual(self.problems(text), [])
+                (self.root / 'wiki/target.txt').unlink()
+                errors = self.problems(text)
+                self.assertEqual(len(errors), 1, errors)
+                self.assertIn('wiki/guide.md:3:', errors[0])
+        self.cfg['topics']['guide']['sources'].append({'path': str(self.root / 'wiki/guide.md')})
+        self.assertEqual(len(self.problems('[x](missing.md)')), 1)
+
+    def test_code_spans_cannot_hide_links_across_blank_paragraphs(self):
+        text = '# Selected\n`unfinished\n\n[renamed](target.txt)\n\n`other\n'
+        self.write('wiki/guide.md', text)
+        for exists in [True, False, True]:
+            if exists:
+                self.write('wiki/target.txt', '')
+            else:
+                (self.root / 'wiki/target.txt').unlink()
+            result = self.cli('check')
+            self.assertEqual(result.returncode, 0 if exists else 1, result.stdout)
+            if not exists:
+                self.assertIn('wiki/guide.md:4:', result.stdout)
+
+    def test_fence_closers_and_inline_html_keep_only_live_links(self):
+        for mark in ['```', '~~~']:
+            text = ('[before](missing.md)\n' + mark + '\n' + mark + 'not a closer\n'
+                    '[example](missing.md)\n' + mark + '\n[after](missing.md)')
+            errors = self.problems(text)
+            self.assertEqual(len(errors), 2, errors)
+            self.assertIn('wiki/guide.md:2:', errors[0])
+            self.assertIn('wiki/guide.md:7:', errors[1])
+
+    def test_inline_html_tokens_keep_surrounding_links(self):
+        for tag in ['span', 'a']:
+            text = ('[before](missing.md)\nText <' + tag + ' title="[example](missing.md)">'
+                    'label</' + tag + '>\n[after](missing.md)')
+            errors = self.problems(text)
+            self.assertEqual(len(errors), 2, errors)
+            self.assertIn('wiki/guide.md:2:', errors[0])
+            self.assertIn('wiki/guide.md:4:', errors[1])
+
     def test_shipped_artifacts_match_distributable_assets(self):
         base = SCRIPT.parents[1]
         self.assertEqual(SCRIPT.read_bytes(), (base / 'evals/fixtures/routed/scripts/ai-context.py').read_bytes())
