@@ -179,6 +179,15 @@ def reference_definition(text):
     return None
 
 
+def indent_prefix(text, minimum=None, start=0):
+    """Return consumed characters and indentation columns without expanding text."""
+    pos, column = 0, start
+    while pos < len(text) and text[pos] in ' \t' and (minimum is None or column - start < minimum):
+        column += 1 if text[pos] == ' ' else 4 - column % 4
+        pos += 1
+    return pos, column - start
+
+
 def markdown_text(lines):
     """Mask inactive Markdown contexts without changing offsets or line numbers."""
     blank = lambda value: re.sub(r'[^\n]', ' ', value)
@@ -197,7 +206,8 @@ def markdown_text(lines):
             quote = re.match(r'^(?: {0,3}>[ \t]?){' + str(owner[0]) + '}', ln)
             prefix, depth = quote.end(), owner[0]
         content = ln[prefix:]
-        indentation = len(content) - len(content.lstrip(' '))
+        indentation = indent_prefix(content)[1]
+        base_column = 0
         if (fence or raw is not None) and (depth < owner[0] or
                 (owner[1] and content.strip() and indentation < owner[1])):
             fence, raw, paragraph = None, None, False
@@ -212,13 +222,14 @@ def markdown_text(lines):
             content = ln[prefix:]
             paragraph = False
         elif list_indent:
-            spaces = len(content) - len(content.lstrip(' '))
-            if spaces >= list_indent:
-                prefix += list_indent
+            characters, columns = indent_prefix(content, list_indent)
+            if columns >= list_indent:
+                prefix += characters
+                base_column = columns
                 content = ln[prefix:]
             elif content.strip():
                 list_indent = 0
-        indent = len(content.expandtabs(4)) - len(content.expandtabs(4).lstrip(' '))
+        indent = indent_prefix(content, start=base_column)[1]
         mark = FENCE.match(content)
         if fence:
             result.append(blank(ln))
@@ -272,9 +283,10 @@ def markdown_text(lines):
                     next_content = following[qend:]
                     if following[:qend].count('>') != depth or not next_content.strip():
                         break
-                    if list_indent and not next_content.startswith(' ' * list_indent):
+                    characters, columns = indent_prefix(next_content, list_indent)
+                    if columns < list_indent:
                         break
-                    candidate.append(next_content[list_indent:])
+                    candidate.append(next_content[characters:])
                 definition = reference_definition('\n'.join(candidate))
                 if definition:
                     label, dest, count = definition

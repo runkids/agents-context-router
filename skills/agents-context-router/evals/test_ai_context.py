@@ -717,6 +717,26 @@ class LinkCheckTests(unittest.TestCase):
         self.assertNotIn("relative link 'missing.md'", result.stdout)
         self.assertIn("relative link 'good.txt'", result.stdout)
 
+    def test_tabs_use_columns_without_changing_source_offsets(self):
+        for opener, closer in [('```md', '```'), ('<pre>', '</pre>')]:
+            text = '- Example:\n  ' + opener + '\n\t[x](missing.md)\n  ' + closer + '\n[live](missing.md)'
+            errors = self.problems(text)
+            self.assertEqual(len(errors), 1, errors)
+            self.assertIn('wiki/guide.md:6:', errors[0])
+
+    def test_tab_wrapped_definitions_and_list_prose(self):
+        text = '- [id]:\n\ttarget.txt\n\n  [id]'
+        self.write('wiki/target.txt', '')
+        self.assertEqual(self.problems(text), [])
+        (self.root / 'wiki/target.txt').unlink()
+        errors = self.problems(text)
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn('wiki/guide.md:2:', errors[0])
+        for prefix in ['\t', '  \t']:
+            errors = self.problems('- item\n\n' + prefix + '[live](missing.md)')
+            self.assertEqual(len(errors), 1, errors)
+            self.assertIn('wiki/guide.md:4:', errors[0])
+
     def test_shipped_artifacts_match_distributable_assets(self):
         base = SCRIPT.parents[1]
         self.assertEqual(SCRIPT.read_bytes(), (base / 'evals/fixtures/routed/scripts/ai-context.py').read_bytes())
