@@ -35,7 +35,8 @@ THEMATIC = re.compile(r' {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,
 LIST_MARKER = re.compile(r'^ {0,3}(?:[-+*]|\d+[.)])[ \t]+')
 BLOCK_HEADING = re.compile(r'^ {0,3}#{1,6}(?:[ \t]|$)')
 TITLE = r'(?:"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|\((?:\\.|[^)\\])*\))'
-HTML_TAG = re.compile(r"</?[A-Za-z][A-Za-z0-9-]*(?:\s+(?:[^<>\"']|\"[^\"]*\"|'[^']*')*)?\s*/?>")
+HTML_ATTRIBUTE = r"[A-Za-z_:][A-Za-z0-9_.:-]*(?:[ \t\r\n]*=[ \t\r\n]*(?:[^ \t\r\n\"'=<>`]+|'[^']*'|\"[^\"]*\"))?"
+HTML_TAG = re.compile(r'</[A-Za-z][A-Za-z0-9-]*[ \t\r\n]*>|<[A-Za-z][A-Za-z0-9-]*(?:[ \t\r\n]+' + HTML_ATTRIBUTE + r')*[ \t\r\n]*/?>')
 
 PUNCTUATION = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'
 BACKTICKS = re.compile(r'`+')
@@ -193,6 +194,16 @@ def indent_prefix(text, minimum=None, start=0):
     return pos, column - start
 
 
+def list_padding(content, marker):
+    """Return marker prefix, list indentation, and any partially consumed tab."""
+    start = re.match(r'^ {0,3}(?:[-+*]|\d+[.)])', content).end()
+    padding, columns = indent_prefix(content[start:marker.end()], start=start)
+    if columns <= 4:
+        return marker.end(), start + columns, start + columns, 0
+    first_columns = indent_prefix(content[start:start + 1], start=start)[1]
+    return start + 1, start + 1, start + first_columns, first_columns - 1
+
+
 def title_continuations(lines):
     """A title continuation cannot consume a line starting a new block."""
     for line in lines:
@@ -289,7 +300,7 @@ def markdown_text(lines):
             prefix, depth = quote.end(), owner[0]
         content = ln[prefix:]
         indentation = indent_prefix(content)[1]
-        base_column = 0
+        base_column, extra_indent = 0, 0
         if (fence or raw is not None) and (depth < owner[0] or
                 (owner[1] and content.strip() and indentation < owner[1])):
             fence, raw, paragraph = None, None, False
@@ -298,8 +309,8 @@ def markdown_text(lines):
         thematic = THEMATIC.fullmatch(content)
         marker = None if thematic else LIST_MARKER.match(content)
         if marker and not (fence or raw is not None):
-            list_indent = len(marker.group().expandtabs(4))
-            prefix += marker.end()
+            end, list_indent, base_column, extra_indent = list_padding(content, marker)
+            prefix += end
             content = ln[prefix:]
             paragraph = False
         elif list_indent:
@@ -310,7 +321,7 @@ def markdown_text(lines):
                 content = ln[prefix:]
             elif content.strip():
                 list_indent = 0
-        indent = indent_prefix(content, start=base_column)[1]
+        indent = indent_prefix(content, start=base_column)[1] + extra_indent
         mark = LINK_FENCE.match(content)
         if fence:
             result.append(blank(ln))
@@ -492,7 +503,10 @@ def link_problems(cfg):
     while pending:
         directory, ancestors = pending.pop()
         canonical = os.path.realpath(directory)
-        if canonical in ancestors or not (canonical == ROOT or canonical.startswith(ROOT + os.sep)):
+        if not (canonical == ROOT or canonical.startswith(ROOT + os.sep)):
+            bad.append(f'{os.path.relpath(directory, ROOT)}: wiki directory is outside repo')
+            continue
+        if canonical in ancestors:
             continue
         try:
             with os.scandir(directory) as entries:

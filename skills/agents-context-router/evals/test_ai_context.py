@@ -354,12 +354,12 @@ class LinkCheckTests(unittest.TestCase):
         outside = self.root.parent / 'repo-lookalike'
         outside.mkdir()
         (outside / 'file.md').write_text('outside', encoding='utf-8')
-        (self.root / 'wiki' / 'escape').symlink_to(outside, target_is_directory=True)
+        (self.root / 'escape').symlink_to(outside, target_is_directory=True)
         self.write('inside.md', '')
         (self.root / 'wiki' / 'inside.md').symlink_to(self.root / 'inside.md')
         self.assertEqual(self.problems('[x](../inside.md) [x](inside.md)'), [])
         for target in ['../wiki', '..', '../../repo-lookalike/file.md',
-                       '%2e%2e/%2e%2e/repo-lookalike/file.md', 'escape/file.md', '%00.md']:
+                       '%2e%2e/%2e%2e/repo-lookalike/file.md', '../escape/file.md', '%00.md']:
             with self.subTest(target=target):
                 self.assertEqual(len(self.problems('[x](' + target + ')')), 1)
 
@@ -545,6 +545,10 @@ class LinkCheckTests(unittest.TestCase):
             self.assertIn('wiki/guide.md:7:', errors[1])
 
     def test_inline_html_tokens_keep_surrounding_links(self):
+        for text in ['Use <type [guide](missing.md)>']:
+            self.assertEqual(len(self.problems(text)), 1, text)
+        for tag in ['<type attr="[x](missing.md)" disabled>', "<type a='[x](missing.md)'>", '<type a=[x](missing.md)>']:
+            self.assertEqual(self.problems('Use ' + tag), [])
         for tag in ['span', 'a']:
             text = ('[before](missing.md)\nText <' + tag + ' title="[example](missing.md)">'
                     'label</' + tag + '>\n[after](missing.md)')
@@ -678,12 +682,21 @@ class LinkCheckTests(unittest.TestCase):
         (self.root / 'wiki/dangling.md').symlink_to(self.root / 'absent.md')
         (self.root / 'wiki/README.md').unlink()
         (self.root / 'wiki/README.md').symlink_to(self.root / 'absent.md')
+        outside_dir = self.root.parent / 'outside-dir'
+        outside_dir.mkdir()
+        (outside_dir / 'page.md').write_text('[x](missing.md)', encoding='utf-8')
+        (self.root / 'wiki/guides').symlink_to(outside_dir, target_is_directory=True)
+        real_scandir = router.os.scandir
+        def deny_scandir(path):
+            self.assertNotEqual(Path(path).resolve(), outside_dir)
+            return real_scandir(path)
         real_open = open
         def deny_external(path, *args, **kwargs):
             self.assertNotEqual(Path(path).resolve(), outside)
             return real_open(path, *args, **kwargs)
-        with patch('builtins.open', side_effect=deny_external):
+        with patch('builtins.open', side_effect=deny_external), patch.object(router.os, 'scandir', side_effect=deny_scandir):
             errors = self.problems('hello')
+        self.assertTrue(any('wiki/guides:' in e for e in errors), errors)
         self.assertTrue(any('wiki/external.md:' in e for e in errors))
         self.assertTrue(any('wiki/dangling.md:' in e for e in errors))
         self.assertTrue(any('wiki/README.md:' in e for e in errors))
@@ -745,6 +758,10 @@ class LinkCheckTests(unittest.TestCase):
         self.assertIn("relative link 'good.txt'", result.stdout)
 
     def test_tabs_use_columns_without_changing_source_offsets(self):
+        for text in ['-     [x](missing.md)', '-\t  [x](missing.md)', '  -     [x](missing.md)']:
+            self.assertEqual(self.problems(text), [], text)
+        for text in ['-    [x](missing.md)', '-\t[x](missing.md)']:
+            self.assertEqual(len(self.problems(text)), 1, text)
         for opener, closer in [('```md', '```'), ('<pre>', '</pre>')]:
             text = '- Example:\n  ' + opener + '\n\t[x](missing.md)\n  ' + closer + '\n[live](missing.md)'
             errors = self.problems(text)
