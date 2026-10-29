@@ -458,10 +458,12 @@ def markdown_text(lines):
             fence, raw, paragraph = None, None, False
         if depth != quote_depth and not (paragraph and depth < quote_depth and content.strip()):
             paragraph, list_indent, quote_depth = False, list_indent if nested else 0, depth
-            lists = lists if nested else []
+            if not nested:
+                lists = []
         sibling = bool(list_indent and indentation < list_indent)
         if sibling and content.strip():
-            lists = [width for width in lists if width <= indentation]
+            while lists and lists[-1] > indentation:
+                lists.pop()
             list_indent = lists[-1] if lists else 0
         if list_indent:
             characters, columns = indent_prefix(content, list_indent)
