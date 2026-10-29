@@ -172,6 +172,30 @@ class CheckTests(unittest.TestCase):
                 self.write('AGENTS.md', f'`guide`\n{page}\n')
                 self.check(0)
 
+    def test_indexed_walk_skips_directories_no_pattern_can_reach(self):
+        hidden = 'projects/.drafts/api/deploy-runbook.md'
+        for path in [hidden, '.cache/projects/old-runbook.md', 'node_modules/pkg/notes-runbook.md']:
+            self.write(path, '# Runbook\n')
+        self.cfg['indexed'] = ['projects/*-runbook.md']
+        self.write('wiki/ai-context.json', json.dumps(self.cfg))
+        visited, real_walk = [], os.walk
+
+        def walk(top, *args, **kwargs):
+            for entry in real_walk(top, *args, **kwargs):
+                visited.append(os.path.relpath(entry[0], os.path.realpath(self.root)).replace(os.sep, '/'))
+                yield entry
+
+        with patch.dict(os.environ, {'AI_CONTEXT_ROOT': str(self.root)}):
+            router = runpy.run_path(str(self.script))
+            with patch('os.walk', walk), redirect_stdout(io.StringIO()) as output:
+                status = router['check'](router['load_cfg']())
+        self.assertEqual(status, 1, output.getvalue())
+        for page in [PAGE, hidden]:
+            self.assertIn('FAIL ' + page + ': indexed page not named', output.getvalue())
+        self.assertIn('2 problem(s)', output.getvalue())
+        self.assertIn('projects/.drafts/api', visited)
+        self.assertEqual([d for d in visited if d.split('/')[0] in ('.cache', 'node_modules')], [])
+
     def test_invalid_indexed(self):
         for value in ['projects/*.md', None, [123], {'projects/*.md': True}]:
             with self.subTest(value=value):

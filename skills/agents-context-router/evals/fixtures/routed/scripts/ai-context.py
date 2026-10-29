@@ -115,6 +115,17 @@ def render(cfg, name):
     return '\n\n'.join(out)
 
 
+def indexed_prefixes(indexed):
+    """The literal text each indexed pattern starts with; every match starts with it."""
+    return [os.path.normcase(re.split(r'[*?\[]', p, maxsplit=1)[0]) for p in indexed]
+
+
+def may_hold_indexed(rel_dir, prefixes):
+    """Whether a file below repo-relative rel_dir could match an indexed pattern."""
+    path = os.path.normcase(rel_dir + '/')
+    return any(path.startswith(p) or p.startswith(path) for p in prefixes)
+
+
 def orphans(cfg, reference_text=''):
     """Docs that exist on disk but that no agent can reach through the router."""
     indexed = cfg.get('indexed', [])
@@ -133,9 +144,12 @@ def orphans(cfg, reference_text=''):
     reference_text += '\n' + router_text
     bad = []
     skip = {'.git', 'node_modules', 'dist', 'build', 'vendor', '.venv', 'target'}
+    prefixes = indexed_prefixes(indexed)
     for d, dirs, files in os.walk(ROOT):
+        base = os.path.relpath(d, ROOT).replace(os.sep, '/')
         dirs[:] = [x for x in dirs if x != '.git' and
-                   (indexed or (x not in skip and not x.startswith('.')))]
+                   ((x not in skip and not x.startswith('.')) or
+                    may_hold_indexed(x if base == '.' else f'{base}/{x}', prefixes))]
         for f in files:
             rel = os.path.relpath(os.path.join(d, f), ROOT).replace(os.sep, '/')
             if not f.endswith('.md'):
@@ -600,8 +614,11 @@ def link_problems(cfg):
     paths.add(router)
     indexed = cfg.get('indexed', [])
     if isinstance(indexed, list) and indexed and all(isinstance(pattern, str) for pattern in indexed):
+        prefixes = indexed_prefixes(indexed)
         for directory, dirs, files in os.walk(ROOT):
-            dirs[:] = [name for name in dirs if name != '.git']
+            base = os.path.relpath(directory, ROOT).replace(os.sep, '/')
+            dirs[:] = [name for name in dirs if name != '.git' and
+                       may_hold_indexed(name if base == '.' else f'{base}/{name}', prefixes)]
             for name in files:
                 if not name.endswith('.md'):
                     continue
