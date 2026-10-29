@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.2.0](https://github.com/runkids/agents-context-router/compare/v0.1.1...v0.2.0) (2026-10-29)
+
+
+### Features
+
+* let check skip bulky directories ([b421c23](https://github.com/runkids/agents-context-router/commit/b421c23429dddd38b88a301191030466c850774f))
+* let check skip bulky directories ([42a36a5](https://github.com/runkids/agents-context-router/commit/42a36a5d260f652bf33aca6881d5e6602dc99ecd))
+
+
+### Bug Fixes
+
+* keep walking the path to a nested wiki ([6be83de](https://github.com/runkids/agents-context-router/commit/6be83deb6a473173654dbcde25548ba840a2c348))
+
+
+### Performance Improvements
+
+* skip directories no indexed pattern can reach ([56054f5](https://github.com/runkids/agents-context-router/commit/56054f5cadd1cffa283fcff221749dbf89d84ba8))
+* skip directories no indexed pattern can reach ([5dece87](https://github.com/runkids/agents-context-router/commit/5dece87bdda499073ea5dce87e756b4a036c6f55))
+
 ## [0.1.1](https://github.com/runkids/agents-context-router/compare/v0.1.0...v0.1.1) (2026-10-29)
 
 
