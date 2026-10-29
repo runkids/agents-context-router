@@ -15,6 +15,9 @@ of existence; use wiki/file[[]1].md to exempt the literal wiki/file[1].md
 without matching wiki/file1.md.
 Keys normalize backslashes to /; * also matches /.
 Copy this file to <repo>/scripts/ai-context.py; the repo root is its parent's parent.
+A symlink outside a scripts/ directory (e.g. on PATH) whose own parent's parent
+has no wiki/ai-context.json uses its target's parent's parent, unless
+AI_CONTEXT_CONFIG is set; only runs that would fail on a missing config change.
 For a shared installation, set AI_CONTEXT_ROOT and optionally AI_CONTEXT_CONFIG
 (default: <root>/wiki/ai-context.json). Explicit relative overrides resolve from
 the invocation cwd independently; relative paths inside the config resolve from ROOT.
@@ -28,7 +31,19 @@ from html.entities import html5
 
 VERSION = '0.0.0'  # x-release-please-version
 
-ROOT = os.path.realpath(os.environ.get('AI_CONTEXT_ROOT') or os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+def script_root():
+    """The script's parent's parent, or its symlink target's when that is the only way to a config."""
+    path = os.path.abspath(__file__)
+    root = os.path.dirname(os.path.dirname(path))
+    if (os.path.islink(path) and not os.environ.get('AI_CONTEXT_CONFIG')
+            and os.path.basename(os.path.dirname(path)).lower() != 'scripts'
+            and not os.path.exists(os.path.join(root, 'wiki', 'ai-context.json'))):
+        root = os.path.dirname(os.path.dirname(os.path.realpath(path)))
+    return root
+
+
+ROOT = os.path.realpath(os.environ.get('AI_CONTEXT_ROOT') or script_root())
 CFG_PATH = os.path.realpath(os.environ.get('AI_CONTEXT_CONFIG') or os.path.join(ROOT, 'wiki', 'ai-context.json'))
 HEAD = re.compile(r'^(#{1,6})\s+(.+?)\s*#*\s*$')
 FENCE = re.compile(r'^\s{0,3}(`{3,}|~{3,})')

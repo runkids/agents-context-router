@@ -1210,6 +1210,63 @@ class RouterTests(unittest.TestCase):
         (self.root / 'wiki' / 'ai-context.json').unlink()
         self.assert_commands({'AI_CONTEXT_CONFIG': str(external)}, self.local_script)
 
+    def link_script(self, link):
+        self.local_script.parent.mkdir(exist_ok=True)
+        shutil.copyfile(SCRIPT, self.local_script)
+        link.parent.mkdir(parents=True, exist_ok=True)
+        link.symlink_to(self.local_script)
+        return link
+
+    def other_repo(self, config=True):
+        other = self.cwd / 'other'
+        (other / 'wiki').mkdir(parents=True)
+        (other / 'AGENTS.md').write_text('`guide`\n', encoding='utf-8')
+        (other / 'wiki' / 'guide.md').write_text('# Guide\nRoot content.\n', encoding='utf-8')
+        (other / 'wiki' / 'README.md').write_text('', encoding='utf-8')
+        if config:
+            self.cfg['topics']['guide']['description'] = 'Read the other guide.'
+            self.save_config(other / 'wiki' / 'ai-context.json')
+        return other
+
+    def test_symlink_outside_scripts_uses_target_root(self):
+        link = self.link_script(self.cwd / 'bin' / 'ai-context')
+        for overrides in [{}, {'AI_CONTEXT_ROOT': ''}, {'AI_CONTEXT_CONFIG': ''}]:
+            self.assert_commands(overrides, script=link)
+
+    def test_symlink_with_config_only_keeps_link_root(self):
+        link = self.link_script(self.cwd / 'bin' / 'ai-context')
+        external = self.save_config(self.cwd / 'router.json')
+        result = self.run_cli('guide', {'AI_CONTEXT_CONFIG': str(external)}, link)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(str(self.cwd / 'wiki' / 'guide.md'), result.stderr)
+
+    def test_symlink_outside_scripts_with_local_config_keeps_link_root(self):
+        other = self.other_repo()
+        link = self.link_script(other / 'tools' / 'ai-context.py')
+        self.assert_commands(script=link, description='Read the other guide.')
+
+    def test_symlink_with_explicit_root_uses_that_root(self):
+        other = self.other_repo()
+        link = self.link_script(self.cwd / 'bin' / 'ai-context')
+        self.assert_commands({'AI_CONTEXT_ROOT': str(other)}, script=link,
+                             description='Read the other guide.')
+
+    def test_symlink_in_scripts_keeps_link_root(self):
+        other = self.other_repo()
+        link = self.link_script(other / 'scripts' / 'ai-context.py')
+        self.assert_commands(script=link, description='Read the other guide.')
+
+    def test_symlink_in_scripts_without_config_fails_closed(self):
+        other = self.other_repo(config=False)
+        for folder in ['scripts', 'Scripts']:
+            with self.subTest(folder=folder):
+                link = self.link_script(other / folder / 'ai-context.py')
+                result = self.run_cli('list', script=link)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(str(other / 'wiki' / 'ai-context.json'), result.stderr)
+                self.assertNotIn('Read the guide.', result.stdout)
+                link.unlink()
+
     def test_missing_selected_config(self):
         missing = self.cwd / 'missing.json'
         result = self.run_cli('list', {'AI_CONTEXT_CONFIG': str(missing)})

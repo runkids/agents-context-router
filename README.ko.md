@@ -151,7 +151,7 @@ AI_CONTEXT_ROOT=/work/repo AI_CONTEXT_CONFIG=/work/settings/router.json \
   python3 /opt/tools/ai-context.py check
 ```
 
-`list`와 topic 명령에도 같은 환경을 사용하고, 커널의 context 로드 명령과 검증 훅에 기록하세요. 재정의하지 않으면 루트는 스크립트의 두 단계 상위 디렉터리이며, 설정 파일은 `<root>/wiki/ai-context.json`입니다. `AI_CONTEXT_ROOT`만 지정하면 해당 저장소의 기본 설정을 사용합니다. `AI_CONTEXT_CONFIG`만 지정하면 스크립트 위치에서 구한 루트를 유지합니다. 재정의 값이 비어 있거나 설정되지 않으면 기본값을 사용합니다.
+`list`와 topic 명령에도 같은 환경을 사용하고, 커널의 context 로드 명령과 검증 훅에 기록하세요. 재정의하지 않으면 루트는 스크립트의 두 단계 상위 디렉터리이며, 설정 파일은 `<root>/wiki/ai-context.json`입니다. `/work/repo/scripts/ai-context.py`를 가리키는 `~/.local/bin/ai-context`처럼 `scripts/` 디렉터리 밖에 있고 링크 쪽 두 단계 상위에 `wiki/ai-context.json`이 없는 심볼릭 링크는, `AI_CONTEXT_CONFIG`가 설정되지 않았다면 링크 대상의 두 단계 상위를 루트로 사용합니다. 설정 파일이 없어 실패하던 실행만 달라지며, `scripts/` 안의 심볼릭 링크는 해당 저장소의 복사본으로 보고 링크 쪽 루트를 유지합니다. `AI_CONTEXT_ROOT`만 지정하면 해당 저장소의 기본 설정을 사용합니다. `AI_CONTEXT_CONFIG`만 지정하면 스크립트 위치에서 구한 루트를 유지합니다. 재정의 값이 비어 있거나 설정되지 않으면 기본값을 사용합니다.
 
 두 경로 모두 정규화됩니다. 명시적으로 지정한 상대 경로는 각각 명령을 실행하는 현재 작업 디렉터리를 기준으로 해석됩니다. `/work`에서 루트를 `repo`, 설정을 `settings/router.json`으로 지정하면 `/work/repo`와 `/work/settings/router.json`을 선택합니다. 외부 설정 파일을 사용해도 JSON 안의 상대 경로는 선택한 루트를 기준으로 해석됩니다. 스크립트는 `~`나 셸 변수를 확장하지 않습니다. 절대 경로를 사용하거나 셸에서 확장하세요.
 
