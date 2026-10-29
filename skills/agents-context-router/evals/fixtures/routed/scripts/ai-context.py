@@ -136,10 +136,10 @@ def skip_patterns(cfg):
     return [p.replace('\\', '/').rstrip('/') for p in value]
 
 
-def skipped_dir(rel, patterns, wiki):
-    """Whether check never walks repo-relative directory rel: it or an ancestor matches,
-    unless it is the wiki, inside it, or on the path to it."""
-    if rel == wiki or rel.startswith(wiki + '/') or wiki.startswith(rel + '/'):
+def skipped_dir(rel, patterns, wiki, traversing=False):
+    """Whether a directory is skipped; traversal may retain the path to the wiki."""
+    if (rel == wiki or rel.startswith(wiki + '/')
+            or (traversing and wiki.startswith(rel + '/'))):
         return False
     parts = rel.split('/')
     return any(path == p or fnmatch.fnmatchcase(path, p)
@@ -178,7 +178,9 @@ def orphans(cfg, reference_text=''):
         dirs[:] = [x for x in dirs if x != '.git' and
                    ((x not in skip and not x.startswith('.')) or
                     may_hold_indexed(child_dir(base, x), prefixes)) and
-                   not skipped_dir(child_dir(base, x), skip_dirs, wiki)]
+                   not skipped_dir(child_dir(base, x), skip_dirs, wiki, traversing=True)]
+        if base != '.' and skipped_dir(base, skip_dirs, wiki):
+            continue
         for f in files:
             rel = os.path.relpath(os.path.join(d, f), ROOT).replace(os.sep, '/')
             if not f.endswith('.md'):
@@ -648,7 +650,9 @@ def link_problems(cfg):
             base = os.path.relpath(directory, ROOT).replace(os.sep, '/')
             dirs[:] = [name for name in dirs if name != '.git' and
                        may_hold_indexed(child_dir(base, name), prefixes) and
-                       not skipped_dir(child_dir(base, name), skip_dirs, wiki)]
+                       not skipped_dir(child_dir(base, name), skip_dirs, wiki, traversing=True)]
+            if base != '.' and skipped_dir(base, skip_dirs, wiki):
+                continue
             for name in files:
                 if not name.endswith('.md'):
                     continue

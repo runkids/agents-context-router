@@ -252,6 +252,23 @@ class CheckTests(unittest.TestCase):
                 self.cfg['skipDirs'] = value
                 self.assertIn('FAIL skipDirs: expected a list of strings', self.check(1))
 
+    def test_skip_dirs_only_traverse_wiki_ancestors(self):
+        self.cfg.update(wikiDir='docs/wiki', routerFile='docs/wiki/README.md')
+        sources = [{'path': 'docs/wiki/guide.md'}]
+        self.cfg['topics']['guide']['sources'] = sources
+        self.write('docs/wiki/README.md', 'docs/wiki/README.md\n')
+        self.write('docs/wiki/guide.md', '# Guide\nUse this guide.\n')
+        self.write('docs/AGENTS.md', '# Generated instructions\n')
+        self.write('docs/dump.md', '# Evidence\n[gone](missing.md)\n')
+        for skip in ['docs', '*']:
+            for indexed in [[], ['docs/*.md']]:
+                with self.subTest(skipDirs=skip, indexed=indexed):
+                    self.cfg.update(skipDirs=[skip], indexed=indexed)
+                    self.check(0)
+                    sources.append({'path': 'docs/dump.md'})
+                    self.assertIn('FAIL docs/dump.md:2:', self.check(1))
+                    sources.pop()
+
     def test_invalid_indexed(self):
         for value in ['projects/*.md', None, [123], {'projects/*.md': True}]:
             with self.subTest(value=value):

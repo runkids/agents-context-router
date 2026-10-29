@@ -26,6 +26,9 @@ Use English Conventional Commit subjects for PR titles and commits:
 - `docs:` for explanatory or formatting changes that leave behavior unchanged.
 - Use `!` or a `BREAKING CHANGE:` footer for incompatible changes.
 
+Merge PRs with squash so Release Please records each change once. Use the PR
+title as the squash commit subject and preserve release footers in its body.
+
 Fixes bump the patch; features bump the minor. While below `1.0.0`, breaking
 changes bump the minor; from `1.0.0`, they bump the major. Docs, tests and chores
 alone do not create a release. Skill instructions are product behavior even
@@ -42,7 +45,7 @@ Review the proposed version before merging the Release PR.
 2. Review the version, changes and checks. With the default `GITHUB_TOKEN`,
    bot-created PRs may not trigger another workflow. Run the Check workflow
    manually against the Release PR branch before merging it.
-3. Merge the Release PR when ready. The `main` workflow runs checks before
+3. Squash-merge the Release PR when ready. The `main` workflow runs checks before
    Release Please creates its `vX.Y.Z` tag and a GitHub
    **draft** release. Tag creation is explicit so later releases can find it.
 4. Review and edit the draft notes into a concise user-facing description,

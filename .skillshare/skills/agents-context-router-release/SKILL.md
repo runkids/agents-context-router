@@ -44,7 +44,7 @@ version, user-visible changes, checks and any blockers before publication.
 ## 3. Merge and inspect the draft
 
 Within the authorized scope, merge the reviewed head with
-`gh pr merge NUMBER --merge --match-head-commit SHA`. Follow the resulting
+`gh pr merge NUMBER --squash --match-head-commit SHA`. Follow the resulting
 Release Please run to completion and inspect the draft. Resolve the tag to its
 commit, confirm it matches the tested merge revision and verify the Check jobs
 for that revision passed. Do not substitute a prior head's green CI.
