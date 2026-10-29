@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Print only the doc sections a task needs.
 
-usage: ai-context.py list | <topic> [<topic>...] | check
+usage: ai-context.py list | <topic> [<topic>...] | check | --version
 
 Topics live in wiki/ai-context.json. A source is a whole file or one exact
 heading (the section runs to the next heading of the same or higher level).
@@ -25,6 +25,8 @@ import fnmatch, json, os, re, sys
 from urllib.parse import unquote
 from html import unescape
 from html.entities import html5
+
+VERSION = '0.0.0'  # x-release-please-version
 
 ROOT = os.path.realpath(os.environ.get('AI_CONTEXT_ROOT') or os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CFG_PATH = os.path.realpath(os.environ.get('AI_CONTEXT_CONFIG') or os.path.join(ROOT, 'wiki', 'ai-context.json'))
@@ -677,8 +679,11 @@ def check(cfg):
 def main(argv):
     sys.stdout.reconfigure(encoding='utf-8')  # section markers and CJK pages break cp1252/cp950 consoles on Windows
     sys.stderr.reconfigure(encoding='utf-8')  # error messages can carry non-ASCII paths
-    cfg = load_cfg()
     args = argv[1:] or ['list']
+    if args == ['--version']:
+        print(f'agents-context-router {VERSION}')
+        return 0
+    cfg = load_cfg()
     if args == ['list']:
         for n, t in cfg['topics'].items():
             print(f'{n:18} {t["description"]}')

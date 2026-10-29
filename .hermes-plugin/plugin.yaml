@@ -1,3 +1,4 @@
 name: agents-context-router
+version: "0.0.0" # x-release-please-version
 description: Route coding agents to only the repository context each task needs.
 author: runkids

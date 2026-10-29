@@ -1,0 +1,38 @@
+name: Check
+
+on:
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            python: '3.8'
+          - os: ubuntu-latest
+            python: '3.13'
+          - os: macos-latest
+            python: '3.13'
+          - os: windows-latest
+            python: '3.13'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Check versions
+        run: python scripts/check-version.py
+      - name: Test release metadata and version command
+        run: python -m unittest discover -s tests
+      - name: Test router
+        run: python -m unittest discover -s skills/agents-context-router/evals -p "test_*.py"
+      - name: Check routed fixture
+        run: python skills/agents-context-router/evals/fixtures/routed/scripts/ai-context.py check

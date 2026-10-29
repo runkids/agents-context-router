@@ -53,6 +53,16 @@ codex plugin marketplace add runkids/agents-context-router --sparse .agents/plug
 codex
 ```
 
+### Antigravity
+
+Install the plugin with the Antigravity CLI:
+
+```bash
+agy plugin install https://github.com/runkids/agents-context-router
+```
+
+The root `plugin.json` exposes the same skills; no extra setup is needed. Reinstall with the same command to update.
+
 ### Skillshare
 
 Already use [Skillshare](https://github.com/runkids/skillshare)? Install it as a plain skill and sync it to all your targets:
@@ -73,14 +83,21 @@ skillshare sync plugins
 
 Skillshare keeps complete native plugins in one place and shows each agent's install status. See the [plugin command guide](https://skillshare.runkids.cc/docs/reference/commands/plugin/).
 
-### Pi, Hermes, Kimi Code and Muse
+### Pi
+
+Pi loads the skill directly from `package.json` without an extension or startup hook.
+
+```bash
+pi install git:github.com/runkids/agents-context-router
+```
+
+To pin a published release, append `@vX.Y.Z` to the Git source, replacing `vX.Y.Z` with an existing tag. Pinned tags stay pinned during updates.
+
+### Hermes, Kimi Code and Muse
 
 Native manifests for more agents live in this repository:
 
 ```bash
-# Pi
-pi install git:github.com/runkids/agents-context-router
-
 # Hermes Agent
 hermes plugins install runkids/agents-context-router --enable
 
@@ -102,6 +119,12 @@ Install it as a skill with [Vercel's Skills CLI](https://github.com/vercel-labs/
 ```bash
 npx skills add runkids/agents-context-router
 ```
+
+## Versions
+
+The package, native plugins, skill and bundled router share one version. `0.0.0` is an unreleased bootstrap baseline; published versions have Git tags and [release notes](https://github.com/runkids/agents-context-router/releases). Read the [release guide](docs/releasing.md) for contribution and release policy.
+
+Copied routers retain their source version. Run `python3 scripts/ai-context.py --version` to identify it; updating the skill does not replace existing copies.
 
 ## Use it
 
@@ -152,6 +175,19 @@ The bundled script uses only the Python standard library (Python 3.8+). Examples
 ## Contributing
 
 Issues and pull requests are welcome. The skill workflow and eval prompts are in [`skills/agents-context-router/`](skills/agents-context-router/).
+
+Maintainers can load the project review and release skills through Skillshare:
+
+```sh
+skillshare install -p
+skillshare sync -p
+```
+
+The project config syncs `.skillshare/skills/` to `universal` and `claude`.
+Use `agents-context-router-code-review` before committing or pushing, and
+`agents-context-router-release` for releases. See the [review guide](docs/review.md)
+and [release guide](docs/releasing.md). These maintainer skills are not part of
+the public router skill bundle.
 
 ## License
 

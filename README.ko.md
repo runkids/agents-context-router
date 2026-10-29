@@ -53,6 +53,16 @@ codex plugin marketplace add runkids/agents-context-router --sparse .agents/plug
 codex
 ```
 
+### Antigravity
+
+Antigravity CLI로 플러그인을 설치합니다.
+
+```bash
+agy plugin install https://github.com/runkids/agents-context-router
+```
+
+루트의 `plugin.json`이 같은 skill을 제공하므로 추가 설정은 필요하지 않습니다. 같은 명령을 다시 실행하면 업데이트됩니다.
+
 ### Skillshare
 
 [Skillshare](https://github.com/runkids/skillshare)를 이미 사용 중인가요? 일반 스킬로 설치하고 모든 타깃에 동기화할 수 있습니다.
@@ -73,14 +83,21 @@ skillshare sync plugins
 
 Skillshare로 여러 네이티브 플러그인을 한곳에서 관리하고 에이전트별 설치 상태를 확인하세요. [플러그인 명령 가이드](https://skillshare.runkids.cc/docs/reference/commands/plugin/)를 참고하세요.
 
-### Pi / Hermes / Kimi Code / Muse
+### Pi
+
+Pi는 `package.json`에서 skill을 직접 불러옵니다. extension이나 시작 hook은 필요하지 않습니다.
+
+```bash
+pi install git:github.com/runkids/agents-context-router
+```
+
+공개된 버전을 고정하려면 Git 소스 뒤에 `@vX.Y.Z`를 붙이고 `vX.Y.Z`를 실제 태그로 바꾸세요. 업데이트해도 고정한 태그는 유지됩니다.
+
+### Hermes / Kimi Code / Muse
 
 이 저장소에는 다른 에이전트용 네이티브 manifest도 들어 있습니다.
 
 ```bash
-# Pi
-pi install git:github.com/runkids/agents-context-router
-
 # Hermes Agent
 hermes plugins install runkids/agents-context-router --enable
 
@@ -102,6 +119,12 @@ muse plugins approve agents-context-router
 ```bash
 npx skills add runkids/agents-context-router
 ```
+
+## 버전
+
+패키지, 네이티브 플러그인, skill과 함께 제공되는 router는 같은 버전을 사용합니다. `0.0.0`은 아직 공개되지 않은 초기 기준값입니다. 공개된 버전에는 Git 태그와 [릴리스 노트](https://github.com/runkids/agents-context-router/releases)가 있습니다. 기여 및 릴리스 절차는 [릴리스 가이드](docs/releasing.md)를 참고하세요.
+
+프로젝트에 복사한 router는 원본 버전을 유지합니다. `python3 scripts/ai-context.py --version`으로 확인할 수 있으며, skill을 업데이트해도 기존 복사본은 바뀌지 않습니다.
 
 ## 사용법
 
@@ -150,6 +173,8 @@ wiki/README.md            사람이 읽는 topic 및 기록 목록
 ## 기여
 
 Issue와 Pull Request를 환영합니다. 스킬 절차와 eval 프롬프트는 [`skills/agents-context-router/`](skills/agents-context-router/)에 있습니다.
+
+유지보수용 `agents-context-router-code-review`와 `agents-context-router-release`는 Skillshare project mode로 관리합니다. `skillshare install -p`, `skillshare sync -p`를 실행하면 `universal`과 `claude`에 동기화됩니다. [리뷰 가이드](docs/review.md)와 [릴리스 가이드](docs/releasing.md)를 참고하세요. 이 두 skill은 공개 router skill 번들에 포함되지 않습니다.
 
 ## 라이선스
 

@@ -53,6 +53,16 @@ codex plugin marketplace add runkids/agents-context-router --sparse .agents/plug
 codex
 ```
 
+### Antigravity
+
+通过 Antigravity CLI 安装插件：
+
+```bash
+agy plugin install https://github.com/runkids/agents-context-router
+```
+
+根目录的 `plugin.json` 会提供同一份 skill，无需额外配置。再次执行相同命令即可更新。
+
 ### Skillshare
 
 已经在用 [Skillshare](https://github.com/runkids/skillshare)？可以作为普通 skill 安装，并同步到所有 target：
@@ -73,14 +83,21 @@ skillshare sync plugins
 
 Skillshare 可以集中管理完整的原生插件，并查看各 Agent 的安装状态。参阅 [插件命令指南](https://skillshare.runkids.cc/docs/reference/commands/plugin/)。
 
-### Pi / Hermes / Kimi Code / Muse
+### Pi
+
+Pi 通过 `package.json` 直接加载 skill，不需要 extension 或启动 hook。
+
+```bash
+pi install git:github.com/runkids/agents-context-router
+```
+
+如需固定已发布的版本，在 Git 来源后加上 `@vX.Y.Z`，并将 `vX.Y.Z` 替换为已存在的 tag。更新时仍会保留固定的 tag。
+
+### Hermes / Kimi Code / Muse
 
 本仓库还包含其他 Agent 的原生 manifest：
 
 ```bash
-# Pi
-pi install git:github.com/runkids/agents-context-router
-
 # Hermes Agent
 hermes plugins install runkids/agents-context-router --enable
 
@@ -102,6 +119,12 @@ muse plugins approve agents-context-router
 ```bash
 npx skills add runkids/agents-context-router
 ```
+
+## 版本
+
+包、原生插件、skill 和附带的 router 共用同一版本。`0.0.0` 是尚未发布的初始基准；正式版本会有 Git tag 和[发行说明](https://github.com/runkids/agents-context-router/releases)。贡献与发布流程请参阅[发布指南](docs/releasing.md)。
+
+复制到项目的 router 会保留来源版本，可用 `python3 scripts/ai-context.py --version` 查询；更新 skill 不会替换已有副本。
 
 ## 使用
 
@@ -150,6 +173,8 @@ wiki/README.md            面向人的 topic 与历史索引
 ## 参与贡献
 
 欢迎提交 Issue 和 Pull Request。Skill 工作流程和 eval 提示词位于 [`skills/agents-context-router/`](skills/agents-context-router/)。
+
+维护用的 `agents-context-router-code-review` 和 `agents-context-router-release` 由 Skillshare project mode 管理。运行 `skillshare install -p`、`skillshare sync -p` 即可同步到 `universal` 和 `claude`；详见 [review 指南](docs/review.md)和[发布指南](docs/releasing.md)。这两个 skill 不包含在对外发布的 router skill 中。
 
 ## 许可证
 

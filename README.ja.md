@@ -53,6 +53,16 @@ codex plugin marketplace add runkids/agents-context-router --sparse .agents/plug
 codex
 ```
 
+### Antigravity
+
+Antigravity CLI でプラグインをインストールします。
+
+```bash
+agy plugin install https://github.com/runkids/agents-context-router
+```
+
+ルートの `plugin.json` が同じスキルを公開するため、追加設定は不要です。同じコマンドを再実行すると更新できます。
+
 ### Skillshare
 
 [Skillshare](https://github.com/runkids/skillshare) を使っていますか？通常のスキルとしてインストールし、すべてのターゲットへ同期できます。
@@ -73,14 +83,21 @@ skillshare sync plugins
 
 Skillshare なら複数のネイティブプラグインをまとめて管理でき、エージェントごとのインストール状況も確認できます。[プラグインのコマンドガイド](https://skillshare.runkids.cc/docs/reference/commands/plugin/)を参照してください。
 
-### Pi / Hermes / Kimi Code / Muse
+### Pi
+
+Pi は `package.json` からスキルを直接読み込みます。拡張機能や起動フックは不要です。
+
+```bash
+pi install git:github.com/runkids/agents-context-router
+```
+
+公開済みのバージョンを固定するには、Git ソースの末尾に `@vX.Y.Z` を付け、`vX.Y.Z` を実在するタグに置き換えてください。更新時も固定したタグが維持されます。
+
+### Hermes / Kimi Code / Muse
 
 このリポジトリには、ほかのエージェント向けのネイティブ manifest も入っています。
 
 ```bash
-# Pi
-pi install git:github.com/runkids/agents-context-router
-
 # Hermes Agent
 hermes plugins install runkids/agents-context-router --enable
 
@@ -102,6 +119,12 @@ muse plugins approve agents-context-router
 ```bash
 npx skills add runkids/agents-context-router
 ```
+
+## バージョン
+
+パッケージ、各ネイティブプラグイン、スキル、付属のルーターは同じバージョンを使います。`0.0.0` は未公開の初期値です。公開済みバージョンには Git タグと[リリースノート](https://github.com/runkids/agents-context-router/releases)があります。貢献とリリースの手順は[リリースガイド](docs/releasing.md)を参照してください。
+
+プロジェクトにコピーしたルーターは元のバージョンを保持します。`python3 scripts/ai-context.py --version` で確認でき、スキルを更新しても既存のコピーは置き換わりません。
 
 ## 使い方
 
@@ -150,6 +173,8 @@ wiki/README.md            人向けのトピック・履歴一覧
 ## コントリビュート
 
 Issue と Pull Request を歓迎します。スキルの手順と eval 用プロンプトは [`skills/agents-context-router/`](skills/agents-context-router/) にあります。
+
+保守用の `agents-context-router-code-review` と `agents-context-router-release` は Skillshare の project mode で管理します。`skillshare install -p`、`skillshare sync -p` を実行すると `universal` と `claude` に同期されます。[レビューガイド](docs/review.md)と[リリースガイド](docs/releasing.md)を参照してください。この2つのスキルは公開用のルータースキルには含まれません。
 
 ## ライセンス
 

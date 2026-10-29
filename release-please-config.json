@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "node",
+  "include-component-in-tag": false,
+  "include-v-in-tag": true,
+  "bump-minor-pre-major": true,
+  "draft": true,
+  "force-tag-creation": true,
+  "packages": {
+    ".": {
+      "extra-files": [
+        { "type": "json", "path": "plugin.json", "jsonpath": "$.version" },
+        { "type": "json", "path": ".claude-plugin/plugin.json", "jsonpath": "$.version" },
+        { "type": "json", "path": ".claude-plugin/marketplace.json", "jsonpath": "$.plugins[0].version" },
+        { "type": "json", "path": ".codex-plugin/plugin.json", "jsonpath": "$.version" },
+        { "type": "json", "path": ".cursor-plugin/plugin.json", "jsonpath": "$.version" },
+        { "type": "json", "path": ".kimi-plugin/plugin.json", "jsonpath": "$.version" },
+        { "type": "json", "path": ".muse-plugin/plugin.json", "jsonpath": "$.version" },
+        { "type": "json", "path": ".muse-plugin/marketplace.json", "jsonpath": "$.plugins[0].version" },
+        { "type": "generic", "path": ".hermes-plugin/plugin.yaml" },
+        { "type": "generic", "path": "skills/agents-context-router/SKILL.md" },
+        { "type": "generic", "path": "skills/agents-context-router/scripts/ai-context.py" },
+        { "type": "generic", "path": "skills/agents-context-router/evals/fixtures/routed/scripts/ai-context.py" }
+      ]
+    }
+  }
+}
