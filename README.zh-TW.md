@@ -151,7 +151,7 @@ AI_CONTEXT_ROOT=/work/repo AI_CONTEXT_CONFIG=/work/settings/router.json \
   python3 /opt/tools/ai-context.py check
 ```
 
-`list` 和 topic 指令也應使用相同的環境，並將其記錄在核心規則的 context 載入指令和驗證 hook 中。未指定覆寫值時，根目錄是腳本所在目錄的上一層，設定檔是 `<root>/wiki/ai-context.json`。只指定 `AI_CONTEXT_ROOT` 會選用該儲存庫的預設設定；只指定 `AI_CONTEXT_CONFIG` 則保留從腳本位置推導的根目錄。覆寫值為空或未設定時使用預設值。
+`list` 和 topic 指令也應使用相同的環境，並將其記錄在核心規則的 context 載入指令和驗證 hook 中。未指定覆寫值時，根目錄是腳本所在目錄的上一層，設定檔是 `<root>/wiki/ai-context.json`。透過 `scripts/` 目錄之外的符號連結執行時（例如指向 `/work/repo/scripts/ai-context.py` 的 `~/.local/bin/ai-context`），若連結所在目錄的上一層沒有 `wiki/ai-context.json`，且未設定 `AI_CONTEXT_CONFIG`，則以連結目標所在目錄的上一層作為根目錄。只有原本會因缺少設定檔而失敗的執行才會改變；`scripts/` 目錄內的符號連結視為該儲存庫的副本，保留連結本身的根目錄。只指定 `AI_CONTEXT_ROOT` 會選用該儲存庫的預設設定；只指定 `AI_CONTEXT_CONFIG` 則保留從腳本位置推導的根目錄。覆寫值為空或未設定時使用預設值。
 
 這兩個路徑都會正規化。明確指定的相對路徑會各自以呼叫指令時的目前工作目錄為基準解析：在 `/work` 中，將根目錄設為 `repo`、設定檔設為 `settings/router.json`，會選用 `/work/repo` 和 `/work/settings/router.json`。即使設定檔在儲存庫外，JSON 內的相對路徑仍以選定的根目錄為基準解析。腳本不會展開 `~` 或 shell 變數；請使用絕對路徑，或讓 shell 展開它們。
 
