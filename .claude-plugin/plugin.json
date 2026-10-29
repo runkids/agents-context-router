@@ -1,6 +1,6 @@
 {
   "name": "agents-context-router",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Route coding agents to only the repository context each task needs.",
   "author": {
     "name": "runkids",

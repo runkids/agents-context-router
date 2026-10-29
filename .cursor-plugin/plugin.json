@@ -1,6 +1,6 @@
 {
   "name": "agents-context-router",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "displayName": "Agents Context Router",
   "description": "Route coding agents to only the repository context each task needs.",
   "author": {
@@ -10,6 +10,11 @@
   "homepage": "https://github.com/runkids/agents-context-router",
   "repository": "https://github.com/runkids/agents-context-router",
   "license": "MIT",
-  "keywords": ["agents", "context", "documentation", "skills"],
+  "keywords": [
+    "agents",
+    "context",
+    "documentation",
+    "skills"
+  ],
   "skills": "./skills/"
 }
