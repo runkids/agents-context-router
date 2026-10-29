@@ -134,6 +134,8 @@ Both selections are canonicalized. Explicit relative overrides resolve independe
 
 Deliberate orphan exceptions go under `"unrouted"` as exact paths or fnmatch globs, each with a reason. For example, `"projects/*/AGENTS.md": "Agents load these scoped instructions by cwd."` exempts those files. Matching is case-sensitive, and backslashes in keys normalize to `/`. `*`, `?` and bracket classes follow Python fnmatch semantics: `*` can cross `/`, so that example also matches `projects/team/api/AGENTS.md`; `**` has no special recursive meaning. Keys match themselves and also act as patterns, regardless of file existence: `wiki/file[1].md` exempts both itself and `wiki/file1.md`. Use `wiki/file[[]1].md` to exempt the literal bracketed filename without also exempting `wiki/file1.md`. Unmatched orphans still fail `check`.
 
+Opt in to discoverability checks outside the wiki with `"indexed": ["projects/*/*-runbook.md"]` (default `[]`). Matching `.md` pages must be topic sources or have their full repo-relative paths named in root instructions, the router index, or rendered topic text. A matching exact path or case-sensitive `"unrouted"` glob also exempts an indexed page when at least one matching reason is a nonblank string. Blank or non-string reasons preserve legacy orphan exceptions, but do not satisfy indexed checks. Indexing includes hidden, dependency, and build directories, excludes `.git`, and does not follow directory symlinks. Indexed patterns use Python fnmatch semantics: `*` crosses `/`; matching is case-sensitive on POSIX and follows platform normalization on Windows. Indexed references do not bypass the existing wiki, history, or nested-instructions checks.
+
 ## Repository layout
 
 ```text

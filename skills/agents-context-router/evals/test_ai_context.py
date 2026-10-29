@@ -1,19 +1,223 @@
-"""CLI regressions: python3 -m unittest discover -s skills/agents-context-router/evals."""
+"""CLI regressions using the installed script layout, without external dependencies."""
 from contextlib import redirect_stdout
 import io
+import runpy
+from unittest.mock import patch
 import json
 import os
 from pathlib import Path
-import runpy
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
 
 
-SCRIPT = Path(__file__).resolve().parents[1] / 'scripts' / 'ai-context.py'
+SKILL = Path(__file__).resolve().parents[1]
+SCRIPT = SKILL / 'scripts/ai-context.py'
+PAGE = 'projects/api/deploy-runbook.md'
+
+
+class CheckTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.script = self.root / 'scripts/ai-context.py'
+        self.script.parent.mkdir()
+        shutil.copy2(SKILL / 'scripts/ai-context.py', self.script)
+        self.write('AGENTS.md', '`guide`\n')
+        self.write('wiki/guide.md', '# Guide\nUse this guide.\n')
+        self.write(PAGE, '# Deploy\nRun deployment.\n')
+        self.cfg = {'topics': {'guide': {
+            'description': 'Guide', 'sources': [{'path': 'wiki/guide.md'}]}},
+            'indexed': ['projects/*/*-runbook.md']}
+
+    def write(self, path, text):
+        dest = self.root / path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(text, encoding='utf-8')
+
+    def run_cli(self, *args):
+        self.write('wiki/ai-context.json', json.dumps(self.cfg))
+        env = {k: v for k, v in os.environ.items()
+               if k not in ('AI_CONTEXT_ROOT', 'AI_CONTEXT_CONFIG')}
+        return subprocess.run([sys.executable, str(self.script), *args],
+                              env=env, capture_output=True, encoding='utf-8')
+
+    def check(self, code):
+        result = self.run_cli('check')
+        self.assertEqual(result.returncode, code, result.stdout + result.stderr)
+        self.assertEqual(result.stderr, '')
+        return result.stdout
+
+    def test_indexed_opt_in(self):
+        for patterns, code in [(None, 0), ([], 0), (['projects/*/*-runbook.md'], 1)]:
+            with self.subTest(patterns=patterns):
+                self.cfg.pop('indexed', None)
+                if patterns is not None:
+                    self.cfg['indexed'] = patterns
+                output = self.check(code)
+                if code:
+                    self.assertIn('FAIL ' + PAGE, output)
+                    for remedy in ['name it in a topic page', 'route it', '"unrouted" with a reason']:
+                        self.assertIn(remedy, output)
+        self.write('AGENTS.md', f'`guide`\n{PAGE}\n')
+        renamed = 'projects/api/new-runbook.md'
+        (self.root / PAGE).rename(self.root / renamed)
+        self.assertIn('FAIL ' + renamed, self.check(1))
+
+    def test_indexed_references(self):
+        for surface in ['root', 'router', 'topic', 'section', 'source', 'source-section', 'basename', 'relative', 'relative-full']:
+            with self.subTest(surface=surface):
+                self.write('AGENTS.md', '`guide`\n' + (PAGE if surface == 'root' else ''))
+                self.cfg['routerFile'] = 'docs/router.md'
+                self.write('docs/router.md', PAGE if surface == 'router' else '')
+                self.write('wiki/guide.md', '# Guide\n' + (
+                    'deploy-runbook.md' if surface == 'basename' else
+                    f'[Deploy](../{PAGE})' if surface == 'relative-full' else
+                    PAGE if surface in ['topic', 'section'] else 'Use this guide.'))
+                sources = [{'path': 'wiki/guide.md'}]
+                if surface == 'section':
+                    sources[0]['heading'] = 'Guide'
+                if surface == 'relative':
+                    self.write('projects/api/topic.md', '[Deploy](./deploy-runbook.md)')
+                    sources.append({'path': 'projects/api/topic.md'})
+                if surface in ['source', 'source-section']:
+                    sources.append({'path': PAGE})
+                    if surface == 'source-section':
+                        sources[-1]['heading'] = 'Deploy'
+                self.cfg['topics']['guide']['sources'] = sources
+                self.check(1 if surface in ['basename', 'relative'] else 0)
+
+    def test_selected_heading_only(self):
+        self.cfg['topics']['guide']['sources'][0]['heading'] = 'Selected'
+        for selected, other, code in [('Read this.', PAGE, 1), (PAGE, 'Read this.', 0)]:
+            with self.subTest(code=code):
+                self.write('wiki/guide.md', f'# Guide\n## Selected\n{selected}\n## Other\n{other}\n')
+                self.check(code)
+
+    def test_exact_unrouted_reason(self):
+        for exceptions, code in [({}, 1), ({PAGE: ''}, 1), ({PAGE: ' \t\n'}, 1),
+                                 ({PAGE: None}, 1), ({PAGE: 'Human only'}, 0),
+                                 ({PAGE.replace('/', '\\'): 'Human only'}, 0),
+                                 ({'projects/*/*.md': 'Human only'}, 0)]:
+            with self.subTest(exceptions=exceptions):
+                self.cfg['unrouted'] = exceptions
+                self.check(code)
+
+    def test_unrouted_globs_and_indexed_overlap(self):
+        for path in [PAGE, 'wiki/extra.md', 'wiki/history/log.md',
+                     'pkg/AGENTS.md', 'vendor/api/runbook.md']:
+            self.write(path, '# Deliberate exception\n')
+            self.cfg['indexed'] = [path]
+            pattern = path.split('/')[0] + '/*'
+            for reason in ['Human only', '', ' \t\n', None, 123]:
+                with self.subTest(path=path, reason=reason):
+                    self.cfg['unrouted'] = {pattern: reason}
+                    output = self.check(0 if reason == 'Human only' else 1)
+                    if reason != 'Human only':
+                        self.assertIn('FAIL ' + path + ': indexed page not named', output)
+                        self.assertIn('1 problem(s)', output)
+            if path != PAGE:
+                (self.root / path).unlink()
+        self.cfg['indexed'] = ['projects/*/*-runbook.md']
+        for exceptions, code in [
+                ({'projects\\*\\*.md': 'Human only'}, 0),
+                ({PAGE: '', 'projects/*': 'Human only'}, 0),
+                ({PAGE: 'Human only', 'projects/*': ''}, 0),
+                ({'PROJECTS/*': 'Human only'}, 1),
+                ({'other/*': 'Human only'}, 1)]:
+            with self.subTest(exceptions=exceptions):
+                self.cfg['unrouted'] = exceptions
+                self.check(code)
+
+    def test_indexed_matching(self):
+        self.cfg['indexed'] = ['projects/*/*-runbook.md', '**/*.md', '*.txt']
+        self.write('projects/api/readme.txt', 'Not Markdown.\n')
+        output = self.check(1)
+        self.assertEqual(output.count('FAIL ' + PAGE + ':'), 1)
+        self.assertIn('1 problem(s)', output)
+        if os.name == 'posix':
+            self.cfg['indexed'] = ['PROJECTS/*.md']
+            self.check(0)
+
+    def test_indexed_traversal_preserves_legacy_scope(self):
+        self.write('.git/internal/runbook.md', 'Git metadata.\n')
+        for prefix in ['.internal', 'vendor', 'build']:
+            with self.subTest(prefix=prefix):
+                page = f'{prefix}/api/deploy-runbook.md'
+                for path in [page, f'{prefix}/AGENTS.md', f'{prefix}/wiki/extra.md',
+                             f'{prefix}/wiki/history/m1.md']:
+                    self.write(path, '# Extra\n')
+                self.cfg.update(wikiDir=f'{prefix}/wiki', historyDir=f'{prefix}/wiki/history')
+                self.write('AGENTS.md', '`guide`\n')
+                self.cfg.pop('indexed', None)
+                self.check(0)
+                self.cfg['indexed'] = []
+                self.check(0)
+                self.cfg['indexed'] = [f'{prefix}/api/*-runbook.md', '.git/**/*.md']
+                output = self.check(1)
+                self.assertIn('FAIL ' + page, output)
+                self.assertIn('1 problem(s)', output)
+                self.write('AGENTS.md', f'`guide`\n{page}\n')
+                self.check(0)
+
+    def test_invalid_indexed(self):
+        for value in ['projects/*.md', None, [123], {'projects/*.md': True}]:
+            with self.subTest(value=value):
+                self.cfg['indexed'] = value
+                self.assertIn('FAIL indexed: expected a list of strings', self.check(1))
+
+    def test_existing_orphan_rules(self):
+        for path, detail in [('wiki/extra.md', 'wiki page no topic loads'),
+                             ('wiki/history/m1.md', 'history file not indexed'),
+                             ('pkg/AGENTS.md', 'scoped instructions no topic loads')]:
+            with self.subTest(path=path):
+                self.write(path, '# Extra\n')
+                self.write('AGENTS.md', f'`guide`\n{PAGE}\n{path}\n')
+                self.cfg['indexed'] = ['**/*.md']
+                self.cfg['unrouted'] = {}
+                self.assertIn(f'FAIL {path}: {detail}', self.check(1))
+                # Legacy exact exceptions still permit empty reasons when not indexed.
+                self.cfg['indexed'] = ['projects/*.md']
+                self.cfg['unrouted'] = {path: ''}
+                self.check(0)
+                (self.root / path).unlink()
+
+    def test_render_errors_survive(self):
+        for text, heading, detail in [(None, None, 'No such file'),
+                                      ('# Guide\n', 'Absent', "heading 'Absent' found 0x"),
+                                      ('# Guide\n# Guide\n', 'Guide', "heading 'Guide' found 2x")]:
+            with self.subTest(detail=detail):
+                source = {'path': 'wiki/guide.md'}
+                if text is None:
+                    (self.root / source['path']).unlink()
+                else:
+                    self.write(source['path'], text)
+                    source['heading'] = heading
+                self.cfg['topics']['guide']['sources'] = [source]
+                output = self.check(1)
+                self.assertIn('FAIL guide:', output)
+                self.assertIn(detail, output)
+                self.assertIn('FAIL ' + PAGE, output)
+
+    def test_existing_commands_and_fixture(self):
+        for args, expected in [(('list',), 'guide              Guide\n'),
+                               (('guide',), '<!-- wiki/guide.md -->\n# Guide\nUse this guide.\n')]:
+            with self.subTest(args=args):
+                result = self.run_cli(*args)
+                self.assertEqual((result.returncode, result.stdout, result.stderr), (0, expected, ''))
+        fixture = self.root / 'fixture'
+        shutil.copytree(SKILL / 'evals/fixtures/routed', fixture)
+        shutil.copy2(SKILL / 'scripts/ai-context.py', fixture / 'scripts/ai-context.py')
+        result = subprocess.run([sys.executable, str(fixture / 'scripts/ai-context.py'), 'check'],
+                                env={k: v for k, v in os.environ.items()
+                                     if k not in ('AI_CONTEXT_ROOT', 'AI_CONTEXT_CONFIG')},
+                                capture_output=True, encoding='utf-8')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(result.stdout.endswith('ok\n'), result.stdout)
+        self.assertEqual(result.stderr, '')
 
 
 class RouterTests(unittest.TestCase):
@@ -172,6 +376,7 @@ class RouterTests(unittest.TestCase):
         result = self.run_cli('check', {'AI_CONTEXT_ROOT': str(fixture)})
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('\nok\n', result.stdout)
+
 
 
 if __name__ == '__main__':

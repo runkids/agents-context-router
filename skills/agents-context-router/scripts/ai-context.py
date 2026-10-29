@@ -7,7 +7,8 @@ Topics live in wiki/ai-context.json. A source is a whole file or one exact
 heading (the section runs to the next heading of the same or higher level).
 check also fails on orphans, so docs cannot silently drift out of the router:
 wiki pages no topic loads, history files missing from the router index, and
-nested AGENTS.md files no topic loads. List deliberate exceptions under
+nested AGENTS.md files no topic loads, and opted-in indexed pages no instructions name.
+List deliberate exceptions under
 "unrouted" in the config as exact paths or case-sensitive fnmatch globs,
 each with a reason. Keys match themselves and other names via fnmatch, regardless
 of existence; use wiki/file[[]1].md to exempt the literal wiki/file[1].md
@@ -76,22 +77,35 @@ def render(cfg, name):
     return '\n\n'.join(out)
 
 
-def orphans(cfg):
+def orphans(cfg, reference_text=''):
     """Docs that exist on disk but that no agent can reach through the router."""
+    indexed = cfg.get('indexed', [])
+    if not isinstance(indexed, list) or any(not isinstance(p, str) for p in indexed):
+        return ['indexed: expected a list of strings']
     wiki = cfg.get('wikiDir', 'wiki')
     history = cfg.get('historyDir', f'{wiki}/history')
     router = cfg.get('routerFile', f'{wiki}/README.md')
     root_file = cfg.get('rootInstructions', 'AGENTS.md')
     routed = {s['path'].replace('\\', '/') for t in cfg['topics'].values() for s in t['sources']}
-    allowed = {p.replace('\\', '/') for p in cfg.get('unrouted', {})}
+    allowed = {p.replace('\\', '/'): reason for p, reason in cfg.get('unrouted', {}).items()}
     router_text = open(os.path.join(ROOT, router), encoding='utf-8').read() if os.path.exists(os.path.join(ROOT, router)) else ''
+    reference_text += '\n' + router_text
     bad = []
     skip = {'.git', 'node_modules', 'dist', 'build', 'vendor', '.venv', 'target'}
     for d, dirs, files in os.walk(ROOT):
-        dirs[:] = [x for x in dirs if x not in skip and not x.startswith('.')]
+        dirs[:] = [x for x in dirs if x != '.git' and
+                   (indexed or (x not in skip and not x.startswith('.')))]
         for f in files:
             rel = os.path.relpath(os.path.join(d, f), ROOT).replace(os.sep, '/')
-            if not f.endswith('.md') or rel in allowed or any(fnmatch.fnmatchcase(rel, p) for p in allowed):
+            if not f.endswith('.md'):
+                continue
+            reasons = [reason for pattern, reason in allowed.items()
+                       if rel == pattern or fnmatch.fnmatchcase(rel, pattern)]
+            if (any(fnmatch.fnmatch(rel, pattern) for pattern in indexed)
+                    and rel not in routed and rel not in reference_text
+                    and not any(isinstance(reason, str) and reason.strip() for reason in reasons)):
+                bad.append(f'{rel}: indexed page not named (name it in a topic page, route it, or list it under "unrouted" with a reason)')
+            if (reasons or any(x in skip or x.startswith('.') for x in rel.split('/')[:-1])):
                 continue
             if rel.startswith(history + '/'):
                 if os.path.relpath(rel, wiki).replace(os.sep, '/') not in router_text and rel not in router_text:
@@ -105,10 +119,11 @@ def orphans(cfg):
 
 
 def check(cfg):
-    bad = orphans(cfg)
+    bad = []
     budgets = cfg.get('budgets', {})
     root_file = cfg.get('rootInstructions', 'AGENTS.md')
     root_text = open(os.path.join(ROOT, root_file), encoding='utf-8').read()
+    reference_text = [root_text]
     root_size = len(root_text.encode())
     root_cap = budgets.get('rootInstructionsMaxBytes', 8192)
     print(f'{root_file:18} {root_size:6} B  (cap {root_cap})')
@@ -118,14 +133,17 @@ def check(cfg):
         if f'`{name}`' not in root_text:
             bad.append(f'{name}: not listed in {root_file} (agents will not know it exists)')
         try:
-            size = len(render(cfg, name).encode())
+            rendered = render(cfg, name)
+            size = len(rendered.encode())
         except (ValueError, OSError) as e:
             bad.append(f'{name}: {e}')
             continue
+        reference_text.append(rendered)
         cap = t.get('maxBytes', budgets.get('defaultTopicMaxBytes', 16384))
         print(f'{name:18} {size:6} B  (cap {cap})')
         if size > cap:
             bad.append(f'{name}: {size} B > {cap} (split the topic; do not raise the cap)')
+    bad = orphans(cfg, '\n'.join(reference_text)) + bad
     for b in bad:
         print('FAIL', b)
     print('ok' if not bad else f'{len(bad)} problem(s)')
