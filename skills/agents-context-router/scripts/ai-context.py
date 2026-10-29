@@ -437,40 +437,46 @@ def block_regions(result, eligible):
     return regions
 
 
+def open_indent(lists):
+    """Return the content indent of the innermost open list item, or 0."""
+    return lists[-1][0] if lists else 0
+
+
 def markdown_text(lines):
     """Mask inactive Markdown contexts without changing offsets or line numbers."""
     blank = lambda value: re.sub(r'[^\n]', ' ', value)
     result, definitions, eligible = [], [], []
     consumed, owner = 0, (0, 0)
     fence, raw = None, None
-    paragraph, list_indent, quote_depth = False, 0, 0
-    lists = []  # (content indent, quote depth opened at) of open list items, innermost last.
+    paragraph, quote_depth = False, 0
+    lists = []  # (content indent, quote depth it opened at) of open list items, innermost last.
     for line_index, ln in enumerate(lines):
         if line_index < consumed:
             result.append(blank(ln))
             continue
         column = indent_prefix(ln)[1]
-        if re.match(r'[ \t]*>', ln) and any(not opened and width > column for width, opened in lists):
+        if re.match(r'[ \t]*>', ln) and any(not quote_at and width > column for width, quote_at in lists):
             # A quote marker left of an outer list item closes that item and everything inside it.
-            lists = [(width, opened) for width, opened in lists if not opened and width <= column]
-            list_indent = lists[-1][0] if lists else 0
+            lists = [(width, quote_at) for width, quote_at in lists if not quote_at and width <= column]
             if owner[1] > column:
                 fence, raw = None, None
             if quote_depth:  # The quote inside the closed item ends; this line starts another.
                 paragraph, quote_depth = False, 0
-        outer = [width for width, opened in lists if opened < quote_depth]
+        outer = [width for width, quote_at in lists if quote_at < quote_depth]
         source = ln
-        ln, nested, markers, quoted = container_prefix(ln, outer[-1] if outer else list_indent)
+        ln, nested, markers, quote_end = container_prefix(ln, outer[-1] if outer else open_indent(lists))
         quote = re.match(r'^(?: {0,3}>[ \t]?)+', ln)
         # The regex would read a moved list indent as the optional space after a bare '>'.
-        prefix = quoted if nested else quote.end() if quote else 0
+        prefix = quote_end if nested else quote.end() if quote else 0
         depth = ln[:prefix].count('>')
         if fence or raw is not None:
             block = ln if owner[0] else source  # A '>' inside a code block outside quotes is literal.
             inside = None
-            if depth >= owner[0]:
-                inside = (prefix if owner[0] == depth else
-                          re.match(r'^(?: {0,3}>[ \t]?){' + str(owner[0]) + '}', block).end())
+            if depth == owner[0]:
+                inside = prefix
+            elif depth > owner[0]:  # A moved tab can sit before a marker where the regex cannot see it.
+                match = re.match(r'^(?: {0,3}>[ \t]?){' + str(owner[0]) + '}', block)
+                inside = match.end() if match else None
             rest = block[inside:] if inside is not None else ''
             if inside is not None and not (owner[1] and rest.strip() and indent_prefix(rest)[1] < owner[1]):
                 ln, prefix, depth = block, inside, owner[0]
@@ -485,21 +491,20 @@ def markdown_text(lines):
         lazy = None
         if paragraph and depth < quote_depth and content.strip():
             # A lazy line keeps the quote open but sits outside the lists opened inside it.
-            lazy = (lists, list_indent)
-            lists = [(width, opened) for width, opened in lists if opened <= depth]
-            list_indent = lists[-1][0] if lists else 0
+            lazy = lists
+            lists = [(width, quote_at) for width, quote_at in lists if quote_at <= depth]
         elif depth != quote_depth:
             if not nested:
                 # Leaving a quote keeps the items around it; entering one closes the items it interrupts.
                 keep = depth if depth < quote_depth else quote_depth - 1
-                lists = [(width, opened) for width, opened in lists if opened <= keep]
-                list_indent = lists[-1][0] if lists else 0
+                lists = [(width, quote_at) for width, quote_at in lists if quote_at <= keep]
             paragraph, quote_depth = False, depth
-        sibling = bool(list_indent and indentation < list_indent) or lazy is not None
+        sibling = indentation < open_indent(lists) or lazy is not None
         if sibling and content.strip():
-            lazy = lazy or (paragraph and (lists, list_indent))  # Restored if the line continues the paragraph.
-            lists = [(width, opened) for width, opened in lists if width <= indentation]
-            list_indent = lists[-1][0] if lists else 0
+            if lazy is None and paragraph:
+                lazy = lists  # Restored if the line continues the paragraph.
+            lists = [(width, quote_at) for width, quote_at in lists if width <= indentation]
+        list_indent = open_indent(lists)
         if list_indent:
             characters, columns = indent_prefix(content, list_indent)
             if columns >= list_indent:
@@ -512,10 +517,10 @@ def markdown_text(lines):
         while (marker and not (fence or raw is not None) and
                (not paragraph or sibling or list_interrupts(content, marker))):
             end, list_indent, base_column, extra_indent = list_padding(content, marker, base_column)
-            opened, width = markers.pop(0) if markers else (depth, list_indent)
-            if not opened:  # Reordering moves a quote's padding after an enclosing marker; use the source indent.
+            quote_at, width = markers.pop(0) if markers else (depth, list_indent)
+            if not quote_at:  # Reordering moves a quote's padding after an enclosing marker; use the source indent.
                 list_indent = width
-            lists.append((list_indent, opened))
+            lists.append((list_indent, quote_at))
             prefix += end
             content = ln[prefix:]
             paragraph = False
@@ -578,8 +583,8 @@ def markdown_text(lines):
             result.append(' ' * prefix + content)
             boundary = (thematic or BLOCK_HEADING.match(content) or
                         (paragraph and lazy is None and re.fullmatch(r' {0,3}(?:=+|-+)[ \t]*', content)))
-            if lazy and paragraph and not boundary:
-                lists, list_indent = lazy
+            if lazy is not None and paragraph and not boundary:
+                lists = lazy
             if content.strip():
                 eligible.append((line_index, not paragraph or bool(boundary), bool(boundary)))
             paragraph = bool(content.strip()) and not boundary

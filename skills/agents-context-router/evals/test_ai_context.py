@@ -645,7 +645,8 @@ class LinkCheckTests(unittest.TestCase):
                  ('> - a\n>   > q\n>\n>     [x](missing.md)', [(4, 'missing.md')]),
                  ('- a\n> q\n\n    [code](missing.md)', []),
                  ('* 1.\n  ```\n  >[code](missing.md)', []),
-                 ('- ```\n  >\n>     [code](missing.md)', [])]
+                 ('- ```\n  >\n>     [code](missing.md)', []),
+                 ('>-\n>   ~~~\n  \t>>\n[x](missing.md)', [(4, 'missing.md')])]
         for text, expected in cases:
             with self.subTest(text=text):
                 self.assertEqual(list(router.link_destinations(text.split('\n'))), expected)
