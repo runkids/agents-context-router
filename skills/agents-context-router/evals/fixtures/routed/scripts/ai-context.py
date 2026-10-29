@@ -575,12 +575,22 @@ def reference_label(text, start, end):
 
 
 def link_problems(cfg):
-    """Check local file links in whole routed sources and wiki Markdown pages."""
+    """Check links in routed sources, wiki pages, and indexed pages."""
     paths = {s['path'].replace('\\', '/') for t in cfg['topics'].values() for s in t['sources']}
     sources = {os.path.abspath(os.path.join(ROOT, p)) for p in paths}
     wiki = cfg.get('wikiDir', 'wiki')
     router = os.path.abspath(os.path.join(ROOT, cfg.get('routerFile', f'{wiki}/README.md')))
     paths.add(router)
+    indexed = cfg.get('indexed', [])
+    if isinstance(indexed, list) and indexed and all(isinstance(pattern, str) for pattern in indexed):
+        for directory, dirs, files in os.walk(ROOT):
+            dirs[:] = [name for name in dirs if name != '.git']
+            for name in files:
+                if not name.endswith('.md'):
+                    continue
+                rel = os.path.relpath(os.path.join(directory, name), ROOT).replace(os.sep, '/')
+                if any(fnmatch.fnmatch(rel, pattern) for pattern in indexed):
+                    paths.add(rel)
     paths = {os.path.abspath(os.path.join(ROOT, p)) for p in paths}
     wiki_paths, bad = set(), []
     pending = [(os.path.join(ROOT, wiki), frozenset())]

@@ -33,6 +33,7 @@ class CheckTests(unittest.TestCase):
         self.script.parent.mkdir()
         shutil.copy2(SKILL / 'scripts/ai-context.py', self.script)
         self.write('AGENTS.md', '`guide`\n')
+        self.write('wiki/README.md', 'wiki/README.md\n')
         self.write('wiki/guide.md', '# Guide\nUse this guide.\n')
         self.write(PAGE, '# Deploy\nRun deployment.\n')
         self.cfg = {'topics': {'guide': {
@@ -78,6 +79,7 @@ class CheckTests(unittest.TestCase):
             with self.subTest(surface=surface):
                 self.write('AGENTS.md', '`guide`\n' + (PAGE if surface == 'root' else ''))
                 self.cfg['routerFile'] = 'docs/router.md'
+                (self.root / 'wiki/README.md').unlink(missing_ok=True)
                 self.write('docs/router.md', PAGE if surface == 'router' else '')
                 self.write('wiki/guide.md', '# Guide\n' + (
                     'deploy-runbook.md' if surface == 'basename' else
@@ -157,6 +159,7 @@ class CheckTests(unittest.TestCase):
                              f'{prefix}/wiki/history/m1.md']:
                     self.write(path, '# Extra\n')
                 self.cfg.update(wikiDir=f'{prefix}/wiki', historyDir=f'{prefix}/wiki/history')
+                self.write(f'{prefix}/wiki/README.md', f'{prefix}/wiki/README.md\n')
                 self.write('AGENTS.md', '`guide`\n')
                 self.cfg.pop('indexed', None)
                 self.check(0)
@@ -271,6 +274,20 @@ class LinkCheckTests(unittest.TestCase):
         self.assertIn('../notes/renamed.md', result.stdout)
         self.assertEqual(self.cli('guide').stdout,
                          '<!-- wiki/guide.md § Selected -->\n# Selected\nHello\n')
+
+    def test_indexed_pages_are_link_checked(self):
+        page = 'projects/api/deploy-runbook.md'
+        self.cfg['indexed'] = ['projects/*/*-runbook.md']
+        self.write('AGENTS.md', f'`guide`\n{page}\n')
+        self.write(page, '[Runbook link](missing.md)\n')
+        self.save_cfg()
+        result = self.cli('check')
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn(f'{page}:1: relative link', result.stdout)
+
+        self.write('projects/api/missing.md', 'Target exists.\n')
+        result = self.cli('check')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_inline_destinations_and_titles(self):
         for whitespace in [' ', '\t', '\n']:
