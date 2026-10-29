@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/runkids/agents-context-router/compare/v0.2.0...v0.2.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **check:** keep the enclosing list item when a line dedents ([#11](https://github.com/runkids/agents-context-router/issues/11)) ([ab98bd3](https://github.com/runkids/agents-context-router/commit/ab98bd3b790f93313d098c7276e24b7bae7cd831))
+
 ## [0.2.0](https://github.com/runkids/agents-context-router/compare/v0.1.1...v0.2.0) (2026-10-29)
 
 

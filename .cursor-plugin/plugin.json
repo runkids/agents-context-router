@@ -1,6 +1,6 @@
 {
   "name": "agents-context-router",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "displayName": "Agents Context Router",
   "description": "Route coding agents to only the repository context each task needs.",
   "author": {
