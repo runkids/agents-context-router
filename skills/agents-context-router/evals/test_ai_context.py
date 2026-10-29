@@ -255,7 +255,7 @@ class LinkCheckTests(unittest.TestCase):
         env = {k: v for k, v in os.environ.items()
                if k not in ('AI_CONTEXT_ROOT', 'AI_CONTEXT_CONFIG')}
         return subprocess.run([sys.executable, str(self.root / 'scripts/ai-context.py'),
-                               *args], env=env, capture_output=True, text=True)
+                               *args], env=env, capture_output=True, text=True, encoding='utf-8')
 
     def problems(self, text):
         self.write('wiki/guide.md', '# Selected\n' + text)
