@@ -630,7 +630,22 @@ class LinkCheckTests(unittest.TestCase):
                  ('- a\n  - b\n\n  a\n\n      [code](missing.md)', []),
                  ('- a\n  - b\n    - c\n\n    b\n\n      [x](missing.md)', [(7, 'missing.md')]),
                  ('- a\n  - b\n    - c\n\n  a\n\n    [x](missing.md)', [(7, 'missing.md')]),
-                 ('- a\n  - b\n    - c\n\nroot\n\n    [code](missing.md)', [])]
+                 ('- a\n  - b\n    - c\n\nroot\n\n    [code](missing.md)', []),
+                 ('- a\n  - b\n  lazy\n\n      [x](missing.md)', [(5, 'missing.md')]),
+                 ('- a\n  - b\nlazy\n\n    [x](missing.md)', [(5, 'missing.md')])]
+        for text, expected in cases:
+            with self.subTest(text=text):
+                self.assertEqual(list(router.link_destinations(text.split('\n'))), expected)
+
+    def test_quotes_inside_list_items_keep_the_enclosing_item(self):
+        cases = [('- a\n\n  > q\n\n    [x](missing.md)', [(5, 'missing.md')]),
+                 ('- a\n  - b\n\n  > q\n\n  a\n\n    [x](missing.md)', [(8, 'missing.md')]),
+                 ('- a\n  > - b\n\n  c\n\n    [x](missing.md)', [(6, 'missing.md')]),
+                 ('- a\n  > - b\n  >   - c\n  >\n  >   b\n  >\n  >     [x](missing.md)', [(7, 'missing.md')]),
+                 ('> - a\n>   > q\n>\n>     [x](missing.md)', [(4, 'missing.md')]),
+                 ('- a\n> q\n\n    [code](missing.md)', []),
+                 ('* 1.\n  ```\n  >[code](missing.md)', []),
+                 ('- ```\n  >\n>     [code](missing.md)', [])]
         for text, expected in cases:
             with self.subTest(text=text):
                 self.assertEqual(list(router.link_destinations(text.split('\n'))), expected)
