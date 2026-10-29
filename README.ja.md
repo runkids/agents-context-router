@@ -157,6 +157,8 @@ AI_CONTEXT_ROOT=/work/repo AI_CONTEXT_CONFIG=/work/settings/router.json \
 
 意図的にルーティングしないファイルは、理由を添えて `"unrouted"` に完全一致のパスまたは fnmatch の glob として指定します。たとえば、`"projects/*/AGENTS.md": "Agents load these scoped instructions by cwd."` は該当ファイルを検査対象から除外します。照合では大文字と小文字を区別し、キー内のバックスラッシュは `/` に正規化されます。`*`、`?`、角括弧の文字クラスは Python の fnmatch の仕様に従います。`*` は `/` をまたぐため、この例は `projects/team/api/AGENTS.md` にも一致します。`**` に特別な再帰の意味はありません。ファイルの存在に関係なく、キーは自身に一致し、同時にパターンとしても働きます。`wiki/file[1].md` は自身と `wiki/file1.md` の両方を除外します。`wiki/file1.md` を除外せずに、角括弧を文字どおり含むファイル名を除外するには、`wiki/file[[]1].md` を使います。一致しない未ルーティングのファイルがあれば、引き続き `check` は失敗します。
 
+生成物や証跡のダンプなど、指示を含まない大きなツリーは `"skipDirs": ["projects/*/artifacts"]`（デフォルト `[]`）で `check` の走査対象から外せます。各要素はリポジトリ相対のディレクトリの完全一致パス、または大文字と小文字を区別する fnmatch の glob で、`"unrouted"` のキーと同じように照合されます（`*` は `/` をまたぎます）。一致したディレクトリには `check` が入らないため、トピックがルーティングしていない限り、その中のページは孤立、indexed、リンクの検査対象になりません。wiki ディレクトリは常に走査されます。
+
 ## リポジトリ構成
 
 ```text
