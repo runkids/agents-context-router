@@ -587,7 +587,7 @@ def link_problems(cfg):
     while pending:
         directory, ancestors = pending.pop()
         canonical = os.path.realpath(directory)
-        if not (canonical == ROOT or canonical.startswith(ROOT + os.sep)):
+        if not (canonical == ROOT or canonical.startswith(os.path.join(ROOT, ''))):
             bad.append(f'{os.path.relpath(directory, ROOT)}: wiki directory is outside repo')
             continue
         if canonical in ancestors:
@@ -604,7 +604,7 @@ def link_problems(cfg):
     for path in sorted(paths | wiki_paths):
         rel = os.path.relpath(path, ROOT)
         canonical = os.path.realpath(path)
-        if not canonical.startswith(ROOT + os.sep) or not os.path.isfile(path):
+        if not canonical.startswith(os.path.join(ROOT, '')) or not os.path.isfile(path):
             if path == router:
                 bad.append(f'{rel}: router is not a file inside repo')
             elif path in wiki_paths and path not in sources:
@@ -627,7 +627,7 @@ def link_problems(cfg):
                 target = os.path.realpath(os.path.normpath(os.path.join(os.path.dirname(path), dest)))
             except (OSError, ValueError):
                 target = ''
-            if not target.startswith(ROOT + os.sep) or not os.path.isfile(target):
+            if not target.startswith(os.path.join(ROOT, '')) or not os.path.isfile(target):
                 bad.append(f'{rel}:{line}: relative link {raw!r} is not a file inside repo')
     return bad
 
