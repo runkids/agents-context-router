@@ -15,7 +15,7 @@ The active config is the single source of truth: `<root>/wiki/ai-context.json` b
 
 ## Shared installation (optional)
 
-By default, copy the script to `scripts/ai-context.py`: the root is its parent's parent, and the config is `<root>/wiki/ai-context.json`. A shared script needs no local `scripts/` directory:
+By default, copy the script to `scripts/ai-context.py`: the root is its parent's parent, and the config is `<root>/wiki/ai-context.json`. A symlink to that copy outside a `scripts/` directory, for example on PATH, uses the target's parent's parent when its own has no `wiki/ai-context.json` and `AI_CONTEXT_CONFIG` is unset. A shared script needs no local `scripts/` directory:
 
 ```sh
 AI_CONTEXT_ROOT=/work/repo AI_CONTEXT_CONFIG=/work/settings/router.json \

@@ -151,7 +151,7 @@ AI_CONTEXT_ROOT=/work/repo AI_CONTEXT_CONFIG=/work/settings/router.json \
   python3 /opt/tools/ai-context.py check
 ```
 
-Use the same environment for `list` and topic commands, and record it in the kernel's load-context commands and verification hooks. Without overrides, the root is the script's parent's parent and the config is `<root>/wiki/ai-context.json`. `AI_CONTEXT_ROOT` alone selects that repo's default config; `AI_CONTEXT_CONFIG` alone keeps the script-derived root. Empty or unset overrides use the defaults.
+Use the same environment for `list` and topic commands, and record it in the kernel's load-context commands and verification hooks. Without overrides, the root is the script's parent's parent and the config is `<root>/wiki/ai-context.json`. A symlink outside a `scripts/` directory whose own parent's parent has no `wiki/ai-context.json`, such as `~/.local/bin/ai-context` pointing at `/work/repo/scripts/ai-context.py`, uses the target's parent's parent unless `AI_CONTEXT_CONFIG` is set. Only runs that would otherwise fail on a missing config change; a symlink inside `scripts/` is that repo's copy and keeps its own root. `AI_CONTEXT_ROOT` alone selects that repo's default config; `AI_CONTEXT_CONFIG` alone keeps the script-derived root. Empty or unset overrides use the defaults.
 
 Both selections are canonicalized. Explicit relative overrides resolve independently from the invocation's current working directory: from `/work`, root `repo` and config `settings/router.json` select `/work/repo` and `/work/settings/router.json`. Relative paths inside the JSON resolve from the selected root, even with an external config. The script does not expand `~` or shell variables; use absolute paths or let your shell expand them.
 
