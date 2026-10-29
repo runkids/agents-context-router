@@ -600,7 +600,7 @@ def link_problems(cfg):
         directory, ancestors = pending.pop()
         canonical = os.path.realpath(directory)
         if not (canonical == ROOT or canonical.startswith(os.path.join(ROOT, ''))):
-            bad.append(f'{os.path.relpath(directory, ROOT)}: wiki directory is outside repo')
+            bad.append(f'{os.path.relpath(directory, ROOT).replace(os.sep, "/")}: wiki directory is outside repo')
             continue
         if canonical in ancestors:
             continue
@@ -612,9 +612,9 @@ def link_problems(cfg):
                     elif entry.name.endswith('.md'):
                         wiki_paths.add(os.path.abspath(entry.path))
         except OSError as error:
-            bad.append(f'{os.path.relpath(directory, ROOT)}: cannot scan wiki directory: {error}')
+            bad.append(f'{os.path.relpath(directory, ROOT).replace(os.sep, "/")}: cannot scan wiki directory: {error}')
     for path in sorted(paths | wiki_paths):
-        rel = os.path.relpath(path, ROOT)
+        rel = os.path.relpath(path, ROOT).replace(os.sep, '/')
         canonical = os.path.realpath(path)
         if not canonical.startswith(os.path.join(ROOT, '')) or not os.path.isfile(path):
             if path == router:

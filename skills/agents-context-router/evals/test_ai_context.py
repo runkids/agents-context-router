@@ -275,6 +275,15 @@ class LinkCheckTests(unittest.TestCase):
         self.assertEqual(self.cli('guide').stdout,
                          '<!-- wiki/guide.md § Selected -->\n# Selected\nHello\n')
 
+    def test_diagnostic_paths_use_forward_slashes(self):
+        native_relpath = os.path.relpath
+        def windows_relpath(*args):
+            return native_relpath(*args).replace('/', '\\')
+        with patch.object(os.path, 'relpath', side_effect=windows_relpath), patch.object(os, 'sep', '\\'):
+            errors = self.problems('[Link](missing.md)')
+        self.assertEqual(len(errors), 1, errors)
+        self.assertTrue(errors[0].startswith('wiki/guide.md:2:'), errors)
+
     def test_indexed_pages_are_link_checked(self):
         page = 'projects/api/deploy-runbook.md'
         self.cfg['indexed'] = ['projects/*/*-runbook.md']
@@ -1120,7 +1129,7 @@ class RouterTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.cwd = Path(self.tmp.name)
+        self.cwd = Path(self.tmp.name).resolve()
         self.root = self.cwd / 'repo'
         self.write('AGENTS.md', '`guide`\n')
         self.write('wiki/guide.md', '# Guide\nRoot content.\n')
