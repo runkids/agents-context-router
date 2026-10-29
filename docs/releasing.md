@@ -3,7 +3,9 @@
 The repository, native plugins, Pi package, skill and bundled router share one
 SemVer version. `package.json` records the source version;
 `.release-please-manifest.json` tracks it for Release Please. `0.0.0` is an
-unreleased bootstrap baseline. The first feature release is `0.1.0`.
+unreleased bootstrap baseline. With no previous release tag, that tracking entry
+does not select the first release version. This repository selects `0.1.0` with
+a `Release-As: 0.1.0` commit footer; later releases follow the policy below.
 
 `release-please-config.json` lists the other version fields under `extra-files`.
 Release Please updates them in the same Release PR. Keep the annotated version
