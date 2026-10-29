@@ -231,6 +231,21 @@ class CheckTests(unittest.TestCase):
                 self.cfg['skipDirs'] = value
                 self.assertIn('FAIL wiki/notes/unmapped.md: wiki page no topic loads', self.check(1))
 
+    def test_skip_dirs_keep_the_path_to_a_nested_wiki(self):
+        self.cfg.update(wikiDir='docs/wiki', routerFile='docs/wiki/README.md')
+        self.cfg['topics']['guide']['sources'] = [{'path': 'docs/wiki/guide.md'}]
+        self.write('docs/wiki/README.md', 'docs/wiki/README.md\n')
+        self.write('docs/wiki/guide.md', '# Guide\nUse this guide.\n')
+        self.write('docs/wiki/unmapped.md', '# Unmapped\n')
+        self.write('docs/other/AGENTS.md', '# Other\n')
+        self.write('AGENTS.md', f'`guide`\n{PAGE}\n')
+        for value in [['docs'], ['*'], ['docs/*']]:
+            with self.subTest(skipDirs=value):
+                self.cfg['skipDirs'] = value
+                output = self.check(1)
+                self.assertIn('FAIL docs/wiki/unmapped.md: wiki page no topic loads', output)
+                self.assertNotIn('docs/other/AGENTS.md', output)
+
     def test_invalid_skip_dirs(self):
         for value in ['projects/*/artifacts', [1], {'projects': 'x'}]:
             with self.subTest(value=value):

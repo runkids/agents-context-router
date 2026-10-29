@@ -137,10 +137,13 @@ def skip_patterns(cfg):
 
 
 def skipped_dir(rel, patterns, wiki):
-    """Whether check never walks repo-relative directory rel; the wiki is always walked."""
-    if rel == wiki or rel.startswith(wiki + '/'):
+    """Whether check never walks repo-relative directory rel: it or an ancestor matches,
+    unless it is the wiki, inside it, or on the path to it."""
+    if rel == wiki or rel.startswith(wiki + '/') or wiki.startswith(rel + '/'):
         return False
-    return any(rel == p or fnmatch.fnmatchcase(rel, p) for p in patterns)
+    parts = rel.split('/')
+    return any(path == p or fnmatch.fnmatchcase(path, p)
+               for path in ('/'.join(parts[:i]) for i in range(1, len(parts) + 1)) for p in patterns)
 
 
 def child_dir(base, name):
