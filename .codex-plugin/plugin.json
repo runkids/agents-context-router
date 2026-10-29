@@ -1,6 +1,6 @@
 {
   "name": "agents-context-router",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Route coding agents to only the repository context each task needs.",
   "author": {
     "name": "runkids",
@@ -9,7 +9,12 @@
   "homepage": "https://github.com/runkids/agents-context-router",
   "repository": "https://github.com/runkids/agents-context-router",
   "license": "MIT",
-  "keywords": ["agents", "context", "documentation", "skills"],
+  "keywords": [
+    "agents",
+    "context",
+    "documentation",
+    "skills"
+  ],
   "skills": "./skills/",
   "interface": {
     "displayName": "Agents Context Router",
@@ -17,8 +22,14 @@
     "longDescription": "Turn an oversized AGENTS.md or CLAUDE.md into a small always-loaded kernel plus wiki topics that a dependency-free script loads on demand, with byte budgets and orphan checks so the docs cannot drift.",
     "developerName": "runkids",
     "category": "Developer Tools",
-    "capabilities": ["Interactive", "Read", "Write"],
-    "defaultPrompt": ["Our AGENTS.md is too big. Split it into a small kernel and task-specific wiki topics."],
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Our AGENTS.md is too big. Split it into a small kernel and task-specific wiki topics."
+    ],
     "websiteURL": "https://github.com/runkids/agents-context-router"
   }
 }

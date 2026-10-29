@@ -26,7 +26,7 @@ from urllib.parse import unquote
 from html import unescape
 from html.entities import html5
 
-VERSION = '0.0.0'  # x-release-please-version
+VERSION = '0.1.0'  # x-release-please-version
 
 ROOT = os.path.realpath(os.environ.get('AI_CONTEXT_ROOT') or os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CFG_PATH = os.path.realpath(os.environ.get('AI_CONTEXT_CONFIG') or os.path.join(ROOT, 'wiki', 'ai-context.json'))
