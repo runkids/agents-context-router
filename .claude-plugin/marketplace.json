@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "agents-context-router",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "source": "./",
       "description": "Route coding agents to only the repository context each task needs."
     }

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/runkids/agents-context-router/compare/v0.1.0...v0.1.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* find the repo when the script runs through a symlink ([a9c7cca](https://github.com/runkids/agents-context-router/commit/a9c7cca38932ad8cdb2c453a12c82bf74d2798d6))
+
 ## 0.1.0 (2026-10-29)
 
 
