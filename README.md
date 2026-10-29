@@ -7,7 +7,7 @@ Keep your agent instructions short. Load the project details only when a task ne
 `agents-context-router` helps coding agents turn an oversized `AGENTS.md` into a small shared kernel and a set of task-specific wiki topics. A lightweight Python script prints only the selected topic; history stays available without loading into every task.
 
 <p align="center">
-  <img src="context-router-stars.svg" alt="A friendly star routes a coding task to the right project docs" width="100%">
+  <img src="assets/context-router-stars.svg" alt="A friendly star routes a coding task to the right project docs" width="100%">
 </p>
 
 ## The idea
@@ -15,11 +15,11 @@ Keep your agent instructions short. Load the project details only when a task ne
 Keep rules that apply to every task in `AGENTS.md`. Move runbooks and reference material into topic pages, and keep dated notes in history. The agent reads the kernel, chooses a topic, and loads only that topic.
 
 <p align="center">
-  <img src="context-router-comic-overload.svg" alt="A three-panel comic: a long instruction file overwhelms an agent, a buried rule is found, and the docs are reorganized" width="100%">
+  <img src="assets/context-router-comic-overload.svg" alt="A three-panel comic: a long instruction file overwhelms an agent, a buried rule is found, and the docs are reorganized" width="100%">
 </p>
 
 <p align="center">
-  <img src="context-router-comic-routing.svg" alt="A three-panel comic showing a task routed through a small kernel to one matching wiki topic" width="100%">
+  <img src="assets/context-router-comic-routing.svg" alt="A three-panel comic showing a task routed through a small kernel to one matching wiki topic" width="100%">
 </p>
 
 ## What it does

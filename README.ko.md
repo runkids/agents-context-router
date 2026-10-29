@@ -7,7 +7,7 @@
 `agents-context-router`는 비대해진 `AGENTS.md`를 작은 공통 규칙(kernel)과 작업별 wiki topic으로 정리하는 스킬입니다. 가벼운 Python 스크립트로 선택한 topic만 출력하고, 기록은 매 작업의 context에 넣지 않고 보관합니다.
 
 <p align="center">
-  <img src="context-router-stars.svg" alt="작은 별 모양 라우터가 작업에 맞는 문서로 안내합니다" width="100%">
+  <img src="assets/context-router-stars.svg" alt="작은 별 모양 라우터가 작업에 맞는 문서로 안내합니다" width="100%">
 </p>
 
 ## 작동 방식
@@ -15,11 +15,11 @@
 모든 작업에 필요한 규칙은 `AGENTS.md`에 둡니다. runbook과 참고 자료는 topic 페이지로, 날짜가 있는 기록은 history로 옮깁니다. 에이전트는 공통 규칙을 읽고 맞는 topic을 골라 그 내용만 불러옵니다.
 
 <p align="center">
-  <img src="context-router-comic-overload.svg" alt="긴 지침 파일에 압도된 에이전트가 묻힌 규칙을 찾고 문서를 정리하는 3컷 만화" width="100%">
+  <img src="assets/context-router-comic-overload.svg" alt="긴 지침 파일에 압도된 에이전트가 묻힌 규칙을 찾고 문서를 정리하는 3컷 만화" width="100%">
 </p>
 
 <p align="center">
-  <img src="context-router-comic-routing.svg" alt="작업이 작은 공통 규칙을 거쳐 알맞은 wiki topic으로 연결되는 3컷 만화" width="100%">
+  <img src="assets/context-router-comic-routing.svg" alt="작업이 작은 공통 규칙을 거쳐 알맞은 wiki topic으로 연결되는 3컷 만화" width="100%">
 </p>
 
 ## 주요 기능

@@ -7,7 +7,7 @@
 `agents-context-router` は、肥大化した `AGENTS.md` を小さな共通ルールとタスク別の wiki トピックに整理するスキルです。軽量な Python スクリプトで選んだトピックだけを表示し、履歴は毎回のコンテキストに含めずに保管できます。
 
 <p align="center">
-  <img src="context-router-stars.svg" alt="小さな星のルーターがタスクに合ったドキュメントへ案内する" width="100%">
+  <img src="assets/context-router-stars.svg" alt="小さな星のルーターがタスクに合ったドキュメントへ案内する" width="100%">
 </p>
 
 ## 仕組み
@@ -15,11 +15,11 @@
 すべてのタスクに必要なルールは `AGENTS.md` に残します。手順書やリファレンスはトピックページへ、日付付きの記録は履歴へ移します。エージェントは共通ルールを読んで該当トピックを選び、その内容だけを読み込みます。
 
 <p align="center">
-  <img src="context-router-comic-overload.svg" alt="長い指示ファイルに困るエージェントが、埋もれたルールを見つけてドキュメントを整理する3コマ漫画" width="100%">
+  <img src="assets/context-router-comic-overload.svg" alt="長い指示ファイルに困るエージェントが、埋もれたルールを見つけてドキュメントを整理する3コマ漫画" width="100%">
 </p>
 
 <p align="center">
-  <img src="context-router-comic-routing.svg" alt="タスクが小さな共通ルールから該当するwikiトピックへ案内される3コマ漫画" width="100%">
+  <img src="assets/context-router-comic-routing.svg" alt="タスクが小さな共通ルールから該当するwikiトピックへ案内される3コマ漫画" width="100%">
 </p>
 
 ## できること

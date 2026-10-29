@@ -7,7 +7,7 @@
 `agents-context-router` 可以把臃肿的 `AGENTS.md` 整理成精简的共用规则，以及按任务加载的 wiki topic。轻量级 Python 脚本只输出选中的 topic；历史记录保留在仓库中，不会默认进入每次任务的上下文。
 
 <p align="center">
-  <img src="context-router-stars.svg" alt="一颗可爱的小星星把任务引导到合适的项目文档" width="100%">
+  <img src="assets/context-router-stars.svg" alt="一颗可爱的小星星把任务引导到合适的项目文档" width="100%">
 </p>
 
 ## 工作方式
@@ -15,11 +15,11 @@
 所有任务都需要的规则放在 `AGENTS.md`。操作手册和参考资料放入 topic 页面，带日期的记录放入 history。Agent 读取共用规则、选择相关 topic，然后只加载该 topic。
 
 <p align="center">
-  <img src="context-router-comic-overload.svg" alt="三格漫画：Agent 被冗长指令淹没，找到深藏的规则，然后整理文档" width="100%">
+  <img src="assets/context-router-comic-overload.svg" alt="三格漫画：Agent 被冗长指令淹没，找到深藏的规则，然后整理文档" width="100%">
 </p>
 
 <p align="center">
-  <img src="context-router-comic-routing.svg" alt="三格漫画：任务经过精简规则，被引导到匹配的 wiki topic" width="100%">
+  <img src="assets/context-router-comic-routing.svg" alt="三格漫画：任务经过精简规则，被引导到匹配的 wiki topic" width="100%">
 </p>
 
 ## 功能
