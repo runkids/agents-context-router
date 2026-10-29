@@ -53,6 +53,7 @@ LINK_FENCE = re.compile(r'^ {0,3}(`{3,}|~{3,})')
 BLOCK_HTML = re.compile(r'^ {0,3}</?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:\s|/?>|$)', re.I)
 THEMATIC = re.compile(r' {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})')
 LIST_MARKER = re.compile(r'^ {0,3}(?:[-+*]|[0-9]{1,9}[.)])(?:[ \t]+|$)')
+CONTAINER_LEAD = re.compile(r'(?:[ \t>]|(?:[-+*]|[0-9]{1,9}[.)])(?=[ \t]|$))*')
 BLOCK_HEADING = re.compile(r'^ {0,3}#{1,6}(?:[ \t]|$)')
 TITLE = r'(?:"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|\((?:\\.|[^)\\])*\))'
 HTML_ATTRIBUTE = r"[A-Za-z_:][A-Za-z0-9_.:-]*(?:[ \t\r\n]*=[ \t\r\n]*(?:[^ \t\r\n\"'=<>`]+|'[^']*'|\"[^\"]*\"))?"
@@ -253,7 +254,8 @@ def reference_definition(text):
     """Read one complete definition and its exact consumed line count."""
     match = DEFINITION_START.match(text)
     found = destination(text, match.end()) if match and valid_label(match[1]) else None
-    if not found or BLANK_LINE.search(text, 0, found[1]):
+    # Only <> may be empty; a definition needs a bare destination.
+    if not found or (not found[0] and not text[:found[1]].endswith('>')) or BLANK_LINE.search(text, 0, found[1]):
         return None
     tail = DEFINITION_END.match(text, found[1], len(text))
     if tail:
@@ -377,29 +379,51 @@ def definition_candidate(lines, index, content, depth, list_indent):
     return definition
 
 
-def leading_quote(line, list_indent):
-    """Keep an outer quote's indentation ahead of a nested list quote."""
+def leading_quote(line, list_indent, open_lists=None):
+    """Keep an outer quote's indentation ahead of a nested list quote.
+
+    With open_lists, measure against the list opened inside those outer quotes.
+    """
+    if open_lists is not None:
+        ends = [0]
+        while True:
+            token = re.match(r' {0,3}>[ \t]?', line[ends[-1]:])
+            if not token:
+                break
+            ends.append(ends[-1] + token.end())
+        # Try the deepest split first: k outer quotes, then a list's spaces, then another '>'.
+        for depth in range(len(ends) - 1, 0, -1):
+            space = re.match(r'[ \t]+(?=>)', line[ends[depth]:])
+            inside = [width for width, quote_at in open_lists if quote_at == depth]
+            if space and inside and indent_prefix(space.group())[1] >= inside[-1]:
+                return ends[depth], [line[:ends[depth]]], inside[-1]
+        return 0, [], list_indent
     match = re.match(r'^((?: {0,3}>[ \t]?)+)([ \t]+)>', line)
     if match and list_indent and indent_prefix(match[2])[1] >= list_indent:
-        return match.end(1), [match[1]]
-    return 0, []
+        return match.end(1), [match[1]], list_indent
+    return 0, [], list_indent
 
 
-def container_prefix(line, list_indent):
+def container_prefix(line, list_indent, open_lists=None):
     """Put quote markers before list prefixes while retaining source offsets.
 
     Also return, per list marker, how many quote markers precede it and its content indent,
-    and the length of the quote prefix.
+    and the length of the quote prefix. open_lists, as (indent, quote depth) pairs, lets
+    leading quotes use the list opened inside them; list_indent is the list ahead of them.
     """
-    pos, quotes = leading_quote(line, list_indent)
-    lists, saw_list, nested, indentation, markers = [], False, False, 0, []
+    pos, quotes, inner = leading_quote(line, list_indent, open_lists)
+    if quotes:  # Spaces after the leading quotes belong to the list inside them.
+        list_indent = inner
+    lists, saw_list, saw_quote, nested, indentation, markers = [], False, False, False, 0, []
     while pos < len(line):
         start = pos
         pos += indent_prefix(line[pos:])[0]
         space = line[start:pos]
         indentation += indent_prefix(space)[1]
-        if line[pos:pos + 1] == '>' and not (list_indent and not saw_list and indentation >= list_indent + 4):
+        if line[pos:pos + 1] == '>' and not (list_indent and not saw_list and not saw_quote and
+                                             indentation >= list_indent + 4):
             nested |= saw_list or (list_indent > 0 and indentation >= list_indent)
+            saw_quote = True
             end = pos + 1
             if line[end:end + 1] in (' ', '\t'):
                 end += 1
@@ -443,7 +467,10 @@ def open_indent(lists):
 
 
 def markdown_text(lines):
-    """Mask inactive Markdown contexts without changing offsets or line numbers."""
+    """Mask inactive Markdown contexts without changing line numbers."""
+    # Expand tabs among leading container markers so block parsing only sees spaces.
+    lines = [line[:CONTAINER_LEAD.match(line).end()].expandtabs(4) + line[CONTAINER_LEAD.match(line).end():]
+             for line in lines]
     blank = lambda value: re.sub(r'[^\n]', ' ', value)
     result, definitions, eligible = [], [], []
     consumed, owner = 0, (0, 0)
@@ -462,9 +489,9 @@ def markdown_text(lines):
                 fence, raw = None, None
             if quote_depth:  # The quote inside the closed item ends; this line starts another.
                 paragraph, quote_depth = False, 0
-        outer = [width for width, quote_at in lists if quote_at < quote_depth]
+        outer = [width for width, quote_at in lists if not quote_at]  # Only these sit ahead of the quote markers.
         source = ln
-        ln, nested, markers, quote_end = container_prefix(ln, outer[-1] if outer else open_indent(lists))
+        ln, nested, markers, quote_end = container_prefix(ln, outer[-1] if outer else 0, lists)
         quote = re.match(r'^(?: {0,3}>[ \t]?)+', ln)
         # The regex would read a moved list indent as the optional space after a bare '>'.
         prefix = quote_end if nested else quote.end() if quote else 0
@@ -472,13 +499,14 @@ def markdown_text(lines):
         if fence or raw is not None:
             block = ln if owner[0] else source  # A '>' inside a code block outside quotes is literal.
             inside = None
-            if depth == owner[0]:
-                inside = prefix
-            elif depth > owner[0]:  # A moved tab can sit before a marker where the regex cannot see it.
-                match = re.match(r'^(?: {0,3}>[ \t]?){' + str(owner[0]) + '}', block)
-                inside = match.end() if match else None
+            if depth >= owner[0]:
+                inside = (prefix if owner[0] == depth else
+                          re.match(r'^(?: {0,3}>[ \t]?){' + str(owner[0]) + '}', block).end())
             rest = block[inside:] if inside is not None else ''
-            if inside is not None and not (owner[1] and rest.strip() and indent_prefix(rest)[1] < owner[1]):
+            # A list marker ahead of the quote starts a new item, which ends a block owned by the old quote.
+            new_item = nested and markers and markers[0][0] < owner[0]
+            if inside is not None and not new_item and not (
+                    owner[1] and rest.strip() and indent_prefix(rest)[1] < owner[1]):
                 ln, prefix, depth = block, inside, owner[0]
             else:
                 fence, raw, paragraph = None, None, False

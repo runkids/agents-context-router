@@ -646,10 +646,25 @@ class LinkCheckTests(unittest.TestCase):
                  ('- a\n> q\n\n    [code](missing.md)', []),
                  ('* 1.\n  ```\n  >[code](missing.md)', []),
                  ('- ```\n  >\n>     [code](missing.md)', []),
-                 ('>-\n>   ~~~\n  \t>>\n[x](missing.md)', [(4, 'missing.md')])]
+                 ('>-\n>   ~~~\n  \t>>\n[x](missing.md)', [(4, 'missing.md')]),
+                 ('> \t<e>\n- >[x](missing.md)', [(2, 'missing.md')]),
+                 ('>```\n>1. >[code](missing.md)', [])]
         for text, expected in cases:
             with self.subTest(text=text):
                 self.assertEqual(list(router.link_destinations(text.split('\n'))), expected)
+
+    def test_tabs_in_container_markers_use_tab_stops(self):
+        cases = [('> \t[x](missing.md)', [(1, 'missing.md')]),
+                 ('- >\n> \t[x](missing.md)', [(2, 'missing.md')]),
+                 ('- 1.\n  > \t[code](missing.md)', []),
+                 ('> \t---\n    [code](missing.md)', []),
+                 ('-\t- a\n\n\t  [x](missing.md)', [(3, 'missing.md')])]
+        for text, expected in cases:
+            with self.subTest(text=text):
+                self.assertEqual(list(router.link_destinations(text.split('\n'))), expected)
+
+    def test_a_definition_needs_a_destination(self):
+        self.assertEqual(list(router.link_destinations(['[d]', '', '[d]:'])), [])
 
     def test_exclusions_and_url_decoding(self):
         for target in ['https://example.test/a', 'mailto:a@b.test', 'custom:thing',
