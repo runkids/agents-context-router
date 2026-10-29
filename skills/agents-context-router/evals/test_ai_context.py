@@ -625,6 +625,16 @@ class LinkCheckTests(unittest.TestCase):
         self.assertEqual(len(self.problems('```foo`bar\n[live](missing.md)')), 1)
         self.assertEqual(self.problems('~~~foo`bar\n[example](missing.md)'), [])
 
+    def test_dedent_returns_to_the_enclosing_list_item(self):
+        cases = [('- a\n  - b\n\n  a\n\n    [x](missing.md)', [(6, 'missing.md')]),
+                 ('- a\n  - b\n\n  a\n\n      [code](missing.md)', []),
+                 ('- a\n  - b\n    - c\n\n    b\n\n      [x](missing.md)', [(7, 'missing.md')]),
+                 ('- a\n  - b\n    - c\n\n  a\n\n    [x](missing.md)', [(7, 'missing.md')]),
+                 ('- a\n  - b\n    - c\n\nroot\n\n    [code](missing.md)', [])]
+        for text, expected in cases:
+            with self.subTest(text=text):
+                self.assertEqual(list(router.link_destinations(text.split('\n'))), expected)
+
     def test_exclusions_and_url_decoding(self):
         for target in ['https://example.test/a', 'mailto:a@b.test', 'custom:thing',
                        '//example.test/a', '/absolute/path', '#heading', '?query', '']:

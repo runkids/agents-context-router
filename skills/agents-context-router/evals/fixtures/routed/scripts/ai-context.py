@@ -438,6 +438,7 @@ def markdown_text(lines):
     consumed, owner = 0, (0, 0)
     fence, raw = None, None
     paragraph, list_indent, quote_depth = False, 0, 0
+    lists = []  # Content indents of open list items, innermost last.
     for line_index, ln in enumerate(lines):
         if line_index < consumed:
             result.append(blank(ln))
@@ -457,20 +458,23 @@ def markdown_text(lines):
             fence, raw, paragraph = None, None, False
         if depth != quote_depth and not (paragraph and depth < quote_depth and content.strip()):
             paragraph, list_indent, quote_depth = False, list_indent if nested else 0, depth
+            lists = lists if nested else []
         sibling = bool(list_indent and indentation < list_indent)
+        if sibling and content.strip():
+            lists = [width for width in lists if width <= indentation]
+            list_indent = lists[-1] if lists else 0
         if list_indent:
             characters, columns = indent_prefix(content, list_indent)
             if columns >= list_indent:
                 prefix += characters
                 base_column, extra_indent = columns, columns - list_indent
                 content = ln[prefix:]
-            elif content.strip():
-                list_indent = 0
         thematic = THEMATIC.fullmatch(content)
         marker = None if thematic else LIST_MARKER.match(content)
         while (marker and not (fence or raw is not None) and
                (not paragraph or sibling or list_interrupts(content, marker))):
             end, list_indent, base_column, extra_indent = list_padding(content, marker, base_column)
+            lists.append(list_indent)
             prefix += end
             content = ln[prefix:]
             paragraph = False
