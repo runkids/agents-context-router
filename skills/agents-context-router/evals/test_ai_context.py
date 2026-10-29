@@ -1238,7 +1238,7 @@ class RouterTests(unittest.TestCase):
         external = self.save_config(self.cwd / 'router.json')
         result = self.run_cli('guide', {'AI_CONTEXT_CONFIG': str(external)}, link)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn(str(self.cwd / 'wiki' / 'guide.md'), result.stderr)
+        self.assertIn(repr(str(self.cwd / 'wiki' / 'guide.md')), result.stderr)  # OSError quotes it
 
     def test_symlink_outside_scripts_with_local_config_keeps_link_root(self):
         other = self.other_repo()
