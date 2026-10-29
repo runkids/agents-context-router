@@ -8,6 +8,8 @@ heading (the section runs to the next heading of the same or higher level).
 check also fails on orphans, so docs cannot silently drift out of the router:
 wiki pages no topic loads, history files missing from the router index, and
 nested AGENTS.md files no topic loads, opted-in indexed pages no instructions name, and relative Markdown links are checked.
+List bulky trees that hold no instructions under "skipDirs" (exact paths or
+case-sensitive fnmatch globs) to keep check from walking them; the wiki is always walked.
 List deliberate routing exceptions under
 "unrouted" in the config as exact paths or case-sensitive fnmatch globs,
 each with a reason. Keys match themselves and other names via fnmatch, regardless
@@ -126,11 +128,37 @@ def may_hold_indexed(rel_dir, prefixes):
     return any(path.startswith(p) or p.startswith(path) for p in prefixes)
 
 
+def skip_patterns(cfg):
+    """Configured skipDirs as forward-slash patterns, or None when the value is invalid."""
+    value = cfg.get('skipDirs', [])
+    if not isinstance(value, list) or any(not isinstance(p, str) for p in value):
+        return None
+    return [p.replace('\\', '/').rstrip('/') for p in value]
+
+
+def skipped_dir(rel, patterns, wiki):
+    """Whether check never walks repo-relative directory rel: it or an ancestor matches,
+    unless it is the wiki, inside it, or on the path to it."""
+    if rel == wiki or rel.startswith(wiki + '/') or wiki.startswith(rel + '/'):
+        return False
+    parts = rel.split('/')
+    return any(path == p or fnmatch.fnmatchcase(path, p)
+               for path in ('/'.join(parts[:i]) for i in range(1, len(parts) + 1)) for p in patterns)
+
+
+def child_dir(base, name):
+    """The repo-relative path of directory name under walk directory base."""
+    return name if base == '.' else f'{base}/{name}'
+
+
 def orphans(cfg, reference_text=''):
     """Docs that exist on disk but that no agent can reach through the router."""
     indexed = cfg.get('indexed', [])
     if not isinstance(indexed, list) or any(not isinstance(p, str) for p in indexed):
         return ['indexed: expected a list of strings']
+    skip_dirs = skip_patterns(cfg)
+    if skip_dirs is None:
+        return ['skipDirs: expected a list of strings']
     wiki = cfg.get('wikiDir', 'wiki')
     history = cfg.get('historyDir', f'{wiki}/history')
     router = cfg.get('routerFile', f'{wiki}/README.md')
@@ -149,7 +177,8 @@ def orphans(cfg, reference_text=''):
         base = os.path.relpath(d, ROOT).replace(os.sep, '/')
         dirs[:] = [x for x in dirs if x != '.git' and
                    ((x not in skip and not x.startswith('.')) or
-                    may_hold_indexed(x if base == '.' else f'{base}/{x}', prefixes))]
+                    may_hold_indexed(child_dir(base, x), prefixes)) and
+                   not skipped_dir(child_dir(base, x), skip_dirs, wiki)]
         for f in files:
             rel = os.path.relpath(os.path.join(d, f), ROOT).replace(os.sep, '/')
             if not f.endswith('.md'):
@@ -614,11 +643,12 @@ def link_problems(cfg):
     paths.add(router)
     indexed = cfg.get('indexed', [])
     if isinstance(indexed, list) and indexed and all(isinstance(pattern, str) for pattern in indexed):
-        prefixes = indexed_prefixes(indexed)
+        prefixes, skip_dirs = indexed_prefixes(indexed), skip_patterns(cfg) or []
         for directory, dirs, files in os.walk(ROOT):
             base = os.path.relpath(directory, ROOT).replace(os.sep, '/')
             dirs[:] = [name for name in dirs if name != '.git' and
-                       may_hold_indexed(name if base == '.' else f'{base}/{name}', prefixes)]
+                       may_hold_indexed(child_dir(base, name), prefixes) and
+                       not skipped_dir(child_dir(base, name), skip_dirs, wiki)]
             for name in files:
                 if not name.endswith('.md'):
                     continue
