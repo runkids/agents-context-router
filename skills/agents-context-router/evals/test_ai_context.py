@@ -40,8 +40,10 @@ class CheckTests(unittest.TestCase):
 
     def run_cli(self, *args):
         self.write('wiki/ai-context.json', json.dumps(self.cfg))
+        env = {k: v for k, v in os.environ.items()
+               if k not in ('AI_CONTEXT_ROOT', 'AI_CONTEXT_CONFIG')}
         return subprocess.run([sys.executable, str(self.script), *args],
-                              capture_output=True, encoding='utf-8')
+                              env=env, capture_output=True, encoding='utf-8')
 
     def check(self, code):
         result = self.run_cli('check')
@@ -99,7 +101,33 @@ class CheckTests(unittest.TestCase):
         for exceptions, code in [({}, 1), ({PAGE: ''}, 1), ({PAGE: ' \t\n'}, 1),
                                  ({PAGE: None}, 1), ({PAGE: 'Human only'}, 0),
                                  ({PAGE.replace('/', '\\'): 'Human only'}, 0),
-                                 ({'projects/*/*.md': 'Human only'}, 1)]:
+                                 ({'projects/*/*.md': 'Human only'}, 0)]:
+            with self.subTest(exceptions=exceptions):
+                self.cfg['unrouted'] = exceptions
+                self.check(code)
+
+    def test_unrouted_globs_and_indexed_overlap(self):
+        for path in [PAGE, 'wiki/extra.md', 'wiki/history/log.md',
+                     'pkg/AGENTS.md', 'vendor/api/runbook.md']:
+            self.write(path, '# Deliberate exception\n')
+            self.cfg['indexed'] = [path]
+            pattern = path.split('/')[0] + '/*'
+            for reason in ['Human only', '', ' \t\n', None, 123]:
+                with self.subTest(path=path, reason=reason):
+                    self.cfg['unrouted'] = {pattern: reason}
+                    output = self.check(0 if reason == 'Human only' else 1)
+                    if reason != 'Human only':
+                        self.assertIn('FAIL ' + path + ': indexed page not named', output)
+                        self.assertIn('1 problem(s)', output)
+            if path != PAGE:
+                (self.root / path).unlink()
+        self.cfg['indexed'] = ['projects/*/*-runbook.md']
+        for exceptions, code in [
+                ({'projects\\*\\*.md': 'Human only'}, 0),
+                ({PAGE: '', 'projects/*': 'Human only'}, 0),
+                ({PAGE: 'Human only', 'projects/*': ''}, 0),
+                ({'PROJECTS/*': 'Human only'}, 1),
+                ({'other/*': 'Human only'}, 1)]:
             with self.subTest(exceptions=exceptions):
                 self.cfg['unrouted'] = exceptions
                 self.check(code)
@@ -184,6 +212,8 @@ class CheckTests(unittest.TestCase):
         shutil.copytree(SKILL / 'evals/fixtures/routed', fixture)
         shutil.copy2(SKILL / 'scripts/ai-context.py', fixture / 'scripts/ai-context.py')
         result = subprocess.run([sys.executable, str(fixture / 'scripts/ai-context.py'), 'check'],
+                                env={k: v for k, v in os.environ.items()
+                                     if k not in ('AI_CONTEXT_ROOT', 'AI_CONTEXT_CONFIG')},
                                 capture_output=True, encoding='utf-8')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(result.stdout.endswith('ok\n'), result.stdout)

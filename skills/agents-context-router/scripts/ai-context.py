@@ -99,13 +99,13 @@ def orphans(cfg, reference_text=''):
             rel = os.path.relpath(os.path.join(d, f), ROOT).replace(os.sep, '/')
             if not f.endswith('.md'):
                 continue
-            reason = allowed.get(rel)
+            reasons = [reason for pattern, reason in allowed.items()
+                       if rel == pattern or fnmatch.fnmatchcase(rel, pattern)]
             if (any(fnmatch.fnmatch(rel, pattern) for pattern in indexed)
                     and rel not in routed and rel not in reference_text
-                    and not (isinstance(reason, str) and reason.strip())):
+                    and not any(isinstance(reason, str) and reason.strip() for reason in reasons)):
                 bad.append(f'{rel}: indexed page not named (name it in a topic page, route it, or list it under "unrouted" with a reason)')
-            if (rel in allowed or any(fnmatch.fnmatchcase(rel, p) for p in allowed)
-                    or any(x in skip or x.startswith('.') for x in rel.split('/')[:-1])):
+            if (reasons or any(x in skip or x.startswith('.') for x in rel.split('/')[:-1])):
                 continue
             if rel.startswith(history + '/'):
                 if os.path.relpath(rel, wiki).replace(os.sep, '/') not in router_text and rel not in router_text:
