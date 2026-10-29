@@ -121,6 +121,19 @@ python3 scripts/ai-context.py check
 
 `list` 顯示可用的 topic。指定 topic 名稱後，腳本只會輸出對應內容，並標示來源路徑。`check` 會驗證路由和設定的上限。
 
+也可以在儲存庫外安裝一份共用腳本，不必在儲存庫內保留 `scripts/` 目錄：
+
+```bash
+AI_CONTEXT_ROOT=/work/repo AI_CONTEXT_CONFIG=/work/settings/router.json \
+  python3 /opt/tools/ai-context.py check
+```
+
+`list` 和 topic 指令也應使用相同的環境，並將其記錄在核心規則的 context 載入指令和驗證 hook 中。未指定覆寫值時，根目錄是腳本所在目錄的上一層，設定檔是 `<root>/wiki/ai-context.json`。只指定 `AI_CONTEXT_ROOT` 會選用該儲存庫的預設設定；只指定 `AI_CONTEXT_CONFIG` 則保留從腳本位置推導的根目錄。覆寫值為空或未設定時使用預設值。
+
+這兩個路徑都會正規化。明確指定的相對路徑會各自以呼叫指令時的目前工作目錄為基準解析：在 `/work` 中，將根目錄設為 `repo`、設定檔設為 `settings/router.json`，會選用 `/work/repo` 和 `/work/settings/router.json`。即使設定檔在儲存庫外，JSON 內的相對路徑仍以選定的根目錄為基準解析。腳本不會展開 `~` 或 shell 變數；請使用絕對路徑，或讓 shell 展開它們。
+
+刻意保留的未路由檔案例外應放在 `"unrouted"` 中，使用精確路徑或 fnmatch glob，並為每項提供理由。例如，`"projects/*/AGENTS.md": "Agents load these scoped instructions by cwd."` 會豁免這些檔案。比對區分大小寫，鍵中的反斜線會正規化為 `/`。`*`、`?` 和方括號字元類別遵循 Python fnmatch 語義：`*` 可以跨越 `/`，因此該範例也會符合 `projects/team/api/AGENTS.md`；`**` 沒有特殊的遞迴意義。不論檔案是否存在，鍵既符合自身，也會作為模式參與比對：`wiki/file[1].md` 會同時豁免自身和 `wiki/file1.md`。使用 `wiki/file[[]1].md` 可豁免帶有字面方括號的檔名，而不會同時豁免 `wiki/file1.md`。未符合的未路由檔案仍會導致 `check` 失敗。
+
 ## Repo 結構
 
 ```text

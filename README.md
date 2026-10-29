@@ -121,6 +121,19 @@ python3 scripts/ai-context.py check
 
 `list` shows available topics. A topic command prints only its mapped sections, marked with their source paths. `check` validates the router and its configured limits.
 
+You can also keep one installed script outside the repository, with no local `scripts/` directory:
+
+```bash
+AI_CONTEXT_ROOT=/work/repo AI_CONTEXT_CONFIG=/work/settings/router.json \
+  python3 /opt/tools/ai-context.py check
+```
+
+Use the same environment for `list` and topic commands, and record it in the kernel's load-context commands and verification hooks. Without overrides, the root is the script's parent's parent and the config is `<root>/wiki/ai-context.json`. `AI_CONTEXT_ROOT` alone selects that repo's default config; `AI_CONTEXT_CONFIG` alone keeps the script-derived root. Empty or unset overrides use the defaults.
+
+Both selections are canonicalized. Explicit relative overrides resolve independently from the invocation's current working directory: from `/work`, root `repo` and config `settings/router.json` select `/work/repo` and `/work/settings/router.json`. Relative paths inside the JSON resolve from the selected root, even with an external config. The script does not expand `~` or shell variables; use absolute paths or let your shell expand them.
+
+Deliberate orphan exceptions go under `"unrouted"` as exact paths or fnmatch globs, each with a reason. For example, `"projects/*/AGENTS.md": "Agents load these scoped instructions by cwd."` exempts those files. Matching is case-sensitive, and backslashes in keys normalize to `/`. `*`, `?` and bracket classes follow Python fnmatch semantics: `*` can cross `/`, so that example also matches `projects/team/api/AGENTS.md`; `**` has no special recursive meaning. Keys match themselves and also act as patterns, regardless of file existence: `wiki/file[1].md` exempts both itself and `wiki/file1.md`. Use `wiki/file[[]1].md` to exempt the literal bracketed filename without also exempting `wiki/file1.md`. Unmatched orphans still fail `check`.
+
 ## Repository layout
 
 ```text

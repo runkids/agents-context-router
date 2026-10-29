@@ -8,21 +8,29 @@ heading (the section runs to the next heading of the same or higher level).
 check also fails on orphans, so docs cannot silently drift out of the router:
 wiki pages no topic loads, history files missing from the router index, and
 nested AGENTS.md files no topic loads. List deliberate exceptions under
-"unrouted" in the config, each with a reason.
+"unrouted" in the config as exact paths or case-sensitive fnmatch globs,
+each with a reason. Keys match themselves and other names via fnmatch, regardless
+of existence; use wiki/file[[]1].md to exempt the literal wiki/file[1].md
+without matching wiki/file1.md.
+Keys normalize backslashes to /; * also matches /.
 Copy this file to <repo>/scripts/ai-context.py; the repo root is its parent's parent.
+For a shared installation, set AI_CONTEXT_ROOT and optionally AI_CONTEXT_CONFIG
+(default: <root>/wiki/ai-context.json). Explicit relative overrides resolve from
+the invocation cwd independently; relative paths inside the config resolve from ROOT.
+Empty or unset overrides use the defaults.
 No dependencies beyond the Python 3.8+ standard library.
 """
-import json, os, re, sys
+import fnmatch, json, os, re, sys
 
-ROOT = os.path.realpath(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-CFG_PATH = os.path.join(ROOT, 'wiki', 'ai-context.json')
+ROOT = os.path.realpath(os.environ.get('AI_CONTEXT_ROOT') or os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+CFG_PATH = os.path.realpath(os.environ.get('AI_CONTEXT_CONFIG') or os.path.join(ROOT, 'wiki', 'ai-context.json'))
 HEAD = re.compile(r'^(#{1,6})\s+(.+?)\s*#*\s*$')
 FENCE = re.compile(r'^\s{0,3}(`{3,}|~{3,})')
 
 
 def load_cfg():
     if not os.path.exists(CFG_PATH):
-        sys.exit(f'missing {CFG_PATH}; copy this script to <repo>/scripts/ and create wiki/ai-context.json')
+        sys.exit(f'missing {CFG_PATH}; copy this script to <repo>/scripts/ and create wiki/ai-context.json, or set AI_CONTEXT_ROOT and AI_CONTEXT_CONFIG for a shared installation')
     with open(CFG_PATH, encoding='utf-8') as f:
         return json.load(f)
 
@@ -45,7 +53,7 @@ def headings(lines):
 
 def section(src):
     path = os.path.realpath(os.path.join(ROOT, src['path'].replace('\\', '/')))
-    if not path.startswith(ROOT + os.sep):
+    if not path.startswith(os.path.join(ROOT, '')):
         raise ValueError(f'{src["path"]}: outside repo')
     with open(path, encoding='utf-8') as f:
         lines = f.read().split('\n')
@@ -83,7 +91,7 @@ def orphans(cfg):
         dirs[:] = [x for x in dirs if x not in skip and not x.startswith('.')]
         for f in files:
             rel = os.path.relpath(os.path.join(d, f), ROOT).replace(os.sep, '/')
-            if rel in allowed or not f.endswith('.md'):
+            if not f.endswith('.md') or rel in allowed or any(fnmatch.fnmatchcase(rel, p) for p in allowed):
                 continue
             if rel.startswith(history + '/'):
                 if os.path.relpath(rel, wiki).replace(os.sep, '/') not in router_text and rel not in router_text:
@@ -137,7 +145,7 @@ def main(argv):
         return check(cfg)
     unknown = [a for a in args if a not in cfg['topics']]
     if unknown:
-        sys.exit(f'unknown topic {unknown[0]!r}; run: python3 scripts/ai-context.py list')
+        sys.exit(f'unknown topic {unknown[0]!r}; rerun this script with list')
     print('\n\n'.join(render(cfg, a) for a in args))
     return 0
 

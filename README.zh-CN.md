@@ -121,6 +121,19 @@ python3 scripts/ai-context.py check
 
 `list` 显示可用 topic。指定 topic 名称后，脚本只会输出映射的内容，并标注来源路径。`check` 会验证路由配置和所设上限。
 
+也可以在仓库外安装一份共用脚本，无需在仓库内保留 `scripts/` 目录：
+
+```bash
+AI_CONTEXT_ROOT=/work/repo AI_CONTEXT_CONFIG=/work/settings/router.json \
+  python3 /opt/tools/ai-context.py check
+```
+
+`list` 和 topic 命令也应使用相同的环境，并将其记录在核心规则的上下文加载命令和验证 hook 中。未指定覆盖值时，根目录是脚本所在目录的上一级，配置文件是 `<root>/wiki/ai-context.json`。仅指定 `AI_CONTEXT_ROOT` 会选用该仓库的默认配置；仅指定 `AI_CONTEXT_CONFIG` 则保留从脚本位置推导的根目录。覆盖值为空或未设置时使用默认值。
+
+这两个路径都会规范化。显式指定的相对路径分别基于命令调用时的当前工作目录解析：在 `/work` 中，将根目录设为 `repo`、配置设为 `settings/router.json`，会选用 `/work/repo` 和 `/work/settings/router.json`。即使配置文件在仓库外，JSON 内的相对路径仍基于选定的根目录解析。脚本不会展开 `~` 或 shell 变量；请使用绝对路径，或让 shell 展开它们。
+
+有意保留的未路由文件例外应放在 `"unrouted"` 中，使用精确路径或 fnmatch glob，并为每项提供理由。例如，`"projects/*/AGENTS.md": "Agents load these scoped instructions by cwd."` 会豁免这些文件。匹配区分大小写，键中的反斜杠会规范化为 `/`。`*`、`?` 和方括号字符类遵循 Python fnmatch 语义：`*` 可以跨越 `/`，因此该示例也会匹配 `projects/team/api/AGENTS.md`；`**` 没有特殊的递归含义。无论文件是否存在，键既匹配自身，也作为模式参与匹配：`wiki/file[1].md` 会同时豁免自身和 `wiki/file1.md`。使用 `wiki/file[[]1].md` 可豁免带有字面方括号的文件名，而不会同时豁免 `wiki/file1.md`。未匹配到的未路由文件仍会导致 `check` 失败。
+
 ## 仓库结构
 
 ```text

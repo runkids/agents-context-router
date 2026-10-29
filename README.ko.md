@@ -121,6 +121,19 @@ python3 scripts/ai-context.py check
 
 `list`는 사용 가능한 topic을 보여 줍니다. topic 이름을 지정하면 해당 부분만 원본 경로와 함께 출력합니다. `check`는 router와 설정된 한도를 검증합니다.
 
+저장소 안에 로컬 `scripts/` 디렉터리를 두지 않고, 저장소 밖에 설치한 스크립트 하나를 사용할 수도 있습니다.
+
+```bash
+AI_CONTEXT_ROOT=/work/repo AI_CONTEXT_CONFIG=/work/settings/router.json \
+  python3 /opt/tools/ai-context.py check
+```
+
+`list`와 topic 명령에도 같은 환경을 사용하고, 커널의 context 로드 명령과 검증 훅에 기록하세요. 재정의하지 않으면 루트는 스크립트의 두 단계 상위 디렉터리이며, 설정 파일은 `<root>/wiki/ai-context.json`입니다. `AI_CONTEXT_ROOT`만 지정하면 해당 저장소의 기본 설정을 사용합니다. `AI_CONTEXT_CONFIG`만 지정하면 스크립트 위치에서 구한 루트를 유지합니다. 재정의 값이 비어 있거나 설정되지 않으면 기본값을 사용합니다.
+
+두 경로 모두 정규화됩니다. 명시적으로 지정한 상대 경로는 각각 명령을 실행하는 현재 작업 디렉터리를 기준으로 해석됩니다. `/work`에서 루트를 `repo`, 설정을 `settings/router.json`으로 지정하면 `/work/repo`와 `/work/settings/router.json`을 선택합니다. 외부 설정 파일을 사용해도 JSON 안의 상대 경로는 선택한 루트를 기준으로 해석됩니다. 스크립트는 `~`나 셸 변수를 확장하지 않습니다. 절대 경로를 사용하거나 셸에서 확장하세요.
+
+의도적으로 라우팅하지 않는 파일은 이유와 함께 `"unrouted"`에 정확한 경로 또는 fnmatch glob으로 지정합니다. 예를 들어 `"projects/*/AGENTS.md": "Agents load these scoped instructions by cwd."`는 해당 파일을 검사 대상에서 제외합니다. 일치는 대소문자를 구분하며, 키 안의 백슬래시는 `/`로 정규화됩니다. `*`, `?`, 대괄호 문자 클래스는 Python fnmatch의 의미를 따릅니다. `*`는 `/`를 넘어서도 일치하므로 이 예시는 `projects/team/api/AGENTS.md`에도 일치합니다. `**`에는 특별한 재귀 의미가 없습니다. 파일의 존재 여부와 관계없이 키는 자기 자신과 일치하면서 패턴으로도 작동합니다. `wiki/file[1].md`는 자신과 `wiki/file1.md`를 모두 제외합니다. `wiki/file1.md`를 제외하지 않고 대괄호가 문자 그대로 포함된 파일 이름을 제외하려면 `wiki/file[[]1].md`를 사용하세요. 일치하지 않는 미라우팅 파일이 있으면 여전히 `check`가 실패합니다.
+
 ## 저장소 구조
 
 ```text
