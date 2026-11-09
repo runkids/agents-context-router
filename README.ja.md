@@ -122,7 +122,7 @@ npx skills add runkids/agents-context-router
 
 ## バージョン
 
-パッケージ、各ネイティブプラグイン、スキル、付属のルーターは同じバージョンを使います。`0.0.0` は未公開の初期値です。公開済みバージョンには Git タグと[リリースノート](https://github.com/runkids/agents-context-router/releases)があります。貢献とリリースの手順は[リリースガイド](docs/releasing.md)を参照してください。
+パッケージ、各ネイティブプラグイン、スキル、付属のルーターは同じバージョンを使います。公開済みバージョンには Git タグと[リリースノート](https://github.com/runkids/agents-context-router/releases)があります。貢献とリリースの手順は[リリースガイド](docs/releasing.md)を参照してください。
 
 プロジェクトにコピーしたルーターは元のバージョンを保持します。`python3 scripts/ai-context.py --version` で確認でき、スキルを更新しても既存のコピーは置き換わりません。
 

@@ -122,7 +122,7 @@ npx skills add runkids/agents-context-router
 
 ## 버전
 
-패키지, 네이티브 플러그인, skill과 함께 제공되는 router는 같은 버전을 사용합니다. `0.0.0`은 아직 공개되지 않은 초기 기준값입니다. 공개된 버전에는 Git 태그와 [릴리스 노트](https://github.com/runkids/agents-context-router/releases)가 있습니다. 기여 및 릴리스 절차는 [릴리스 가이드](docs/releasing.md)를 참고하세요.
+패키지, 네이티브 플러그인, skill과 함께 제공되는 router는 같은 버전을 사용합니다. 공개된 버전에는 Git 태그와 [릴리스 노트](https://github.com/runkids/agents-context-router/releases)가 있습니다. 기여 및 릴리스 절차는 [릴리스 가이드](docs/releasing.md)를 참고하세요.
 
 프로젝트에 복사한 router는 원본 버전을 유지합니다. `python3 scripts/ai-context.py --version`으로 확인할 수 있으며, skill을 업데이트해도 기존 복사본은 바뀌지 않습니다.
 

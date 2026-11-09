@@ -122,7 +122,7 @@ npx skills add runkids/agents-context-router
 
 ## 版本
 
-套件、原生 plugin、skill 與附帶的 router 共用同一版本。`0.0.0` 是尚未發布的初始基準；正式版本會有 Git tag 與[發行說明](https://github.com/runkids/agents-context-router/releases)。貢獻與發布流程請參閱[發版指南](docs/releasing.md)。
+套件、原生 plugin、skill 與附帶的 router 共用同一版本。正式版本會有 Git tag 與[發行說明](https://github.com/runkids/agents-context-router/releases)。貢獻與發布流程請參閱[發版指南](docs/releasing.md)。
 
 複製到專案的 router 會保留來源版本，可用 `python3 scripts/ai-context.py --version` 查詢；更新 skill 不會替換既有副本。
 

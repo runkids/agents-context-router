@@ -23,8 +23,11 @@ reporting a finding.
 
 ## 2. Run five passes
 
-Use independent subagents for separate passes when available; otherwise run them
-sequentially. Give each the pinned diff, spec and relevant repository docs.
+The passes are separate so that one pass's conclusions do not steer another. For
+a diff that touches several consumers, run them as independent subagents when
+available and give each the pinned diff, spec and relevant repository docs. For
+a small diff, run the passes yourself in sequence: each subagent re-reads the
+same context, which costs more than it adds.
 
 1. **Correctness:** wrong topic output, missed checks, broken errors, path escapes,
    symlink handling, encoding and Python 3.8 compatibility. Preserve fail-closed

@@ -122,7 +122,7 @@ npx skills add runkids/agents-context-router
 
 ## Versions
 
-The package, native plugins, skill and bundled router share one version. `0.0.0` is an unreleased bootstrap baseline; published versions have Git tags and [release notes](https://github.com/runkids/agents-context-router/releases). Read the [release guide](docs/releasing.md) for contribution and release policy.
+The package, native plugins, skill and bundled router share one version. Published versions have Git tags and [release notes](https://github.com/runkids/agents-context-router/releases). Read the [release guide](docs/releasing.md) for contribution and release policy.
 
 Copied routers retain their source version. Run `python3 scripts/ai-context.py --version` to identify it; updating the skill does not replace existing copies.
 
