@@ -20,6 +20,9 @@ SKILL = Path(__file__).resolve().parents[1]
 SCRIPT = SKILL / 'scripts/ai-context.py'
 PAGE = 'projects/api/deploy-runbook.md'
 sys.dont_write_bytecode = True  # keep __pycache__ out of the shipped scripts/ folder
+from fixture_helpers import run_router, write_fixture
+
+
 spec =importlib.util.spec_from_file_location('ai_context', SCRIPT)
 router = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(router)
@@ -42,16 +45,11 @@ class CheckTests(unittest.TestCase):
             'indexed': ['projects/*/*-runbook.md']}
 
     def write(self, path, text):
-        dest = self.root / path
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(text, encoding='utf-8')
+        write_fixture(self.root, path, text)
 
     def run_cli(self, *args):
         self.write('wiki/ai-context.json', json.dumps(self.cfg))
-        env = {k: v for k, v in os.environ.items()
-               if k not in ('AI_CONTEXT_ROOT', 'AI_CONTEXT_CONFIG')}
-        return subprocess.run([sys.executable, str(self.script), *args],
-                              env=env, capture_output=True, encoding='utf-8')
+        return run_router(self.script, *args)
 
     def check(self, code):
         result = self.run_cli('check')
@@ -342,18 +340,13 @@ class LinkCheckTests(unittest.TestCase):
         self.save_cfg()
 
     def write(self, name, text):
-        path = self.root / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding='utf-8')
+        write_fixture(self.root, name, text)
 
     def save_cfg(self):
         self.write('wiki/ai-context.json', json.dumps(self.cfg))
 
     def cli(self, *args):
-        env = {k: v for k, v in os.environ.items()
-               if k not in ('AI_CONTEXT_ROOT', 'AI_CONTEXT_CONFIG')}
-        return subprocess.run([sys.executable, str(self.root / 'scripts/ai-context.py'),
-                               *args], env=env, capture_output=True, text=True, encoding='utf-8')
+        return run_router(self.root / 'scripts/ai-context.py', *args)
 
     def problems(self, text):
         self.write('wiki/guide.md', '# Selected\n' + text)
@@ -1279,9 +1272,7 @@ class RouterTests(unittest.TestCase):
         self.local_script = self.root / 'scripts' / 'ai-context.py'
 
     def write(self, path, text):
-        dest = self.root / path
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(text, encoding='utf-8')
+        write_fixture(self.root, path, text)
 
     def save_config(self, path=None):
         path = path or self.root / 'wiki' / 'ai-context.json'
@@ -1289,11 +1280,7 @@ class RouterTests(unittest.TestCase):
         return path
 
     def run_cli(self, command, overrides=None, script=SCRIPT):
-        env = {k: v for k, v in os.environ.items()
-               if k not in ('AI_CONTEXT_ROOT', 'AI_CONTEXT_CONFIG')}
-        env.update(overrides or {})
-        return subprocess.run([sys.executable, str(script), command], cwd=self.cwd,
-                              env=env, capture_output=True, text=True, encoding='utf-8')
+        return run_router(script, command, overrides=overrides, cwd=self.cwd)
 
     def assert_commands(self, overrides=None, script=SCRIPT, description='Read the guide.'):
         for command, expected in [('list', description),

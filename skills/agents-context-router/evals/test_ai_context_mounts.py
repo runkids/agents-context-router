@@ -3,6 +3,7 @@ import copy
 import importlib.util
 import io
 import json
+import ntpath
 import os
 from pathlib import Path
 import shutil
@@ -16,6 +17,9 @@ from unittest.mock import patch
 SKILL = Path(__file__).resolve().parents[1]
 SCRIPT = SKILL / 'scripts/ai-context.py'
 sys.dont_write_bytecode = True
+from fixture_helpers import run_router, write_fixture
+
+
 spec = importlib.util.spec_from_file_location('mounted_ai_context', SCRIPT)
 router = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(router)
@@ -43,10 +47,7 @@ class MountFixture(unittest.TestCase):
                                     'sources': [{'path': 'wiki/guide.md'}]}}}
 
     def write(self, relative, text):
-        path = self.root / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding='utf-8')
-        return path
+        return write_fixture(self.root, relative, text)
 
     def save_configs(self):
         self.write('wiki/ai-context.json', json.dumps(self.cfg, ensure_ascii=False))
@@ -54,13 +55,10 @@ class MountFixture(unittest.TestCase):
                    json.dumps(self.inner_cfg, ensure_ascii=False))
 
     def cli(self, *args, root=None, config=None, cwd=None):
-        env = {key: value for key, value in os.environ.items()
-               if key not in ('AI_CONTEXT_ROOT', 'AI_CONTEXT_CONFIG')}
-        env['AI_CONTEXT_ROOT'] = str(self.root if root is None else root)
-        env['AI_CONTEXT_CONFIG'] = str(self.root / 'wiki/ai-context.json'
-                                       if config is None else config)
-        return subprocess.run([sys.executable, str(SCRIPT), *args], env=env,
-                              cwd=cwd, capture_output=True, encoding='utf-8')
+        overrides = {'AI_CONTEXT_ROOT': str(self.root if root is None else root),
+                     'AI_CONTEXT_CONFIG': str(self.root / 'wiki/ai-context.json'
+                                              if config is None else config)}
+        return run_router(SCRIPT, *args, overrides=overrides, cwd=cwd)
 
     def call_main(self, *args):
         # Real main with reconfigurable streams; injected I/O faults cannot
@@ -1263,6 +1261,136 @@ class MountAliasTests(MountFixture):
                     {'path': 'wiki/guide.md'}, {'path': source}]
                 self.save_configs()
                 self.checked_alias(0)
+
+
+class MountWindowsMembershipTests(MountFixture):
+    def membership_case(self, wiki, history, relative, reason, index='', routed=False, alias=False):
+        MountFixture.setUp(self)
+        shutil.rmtree(self.module_root / 'wiki')
+        self.inner_cfg.update(wikiDir=wiki, historyDir=history,
+                              routerFile=wiki + '/README.md')
+        self.inner_cfg['topics']['guide']['sources'] = [{'path': wiki + '/guide.md'}]
+        self.write(str(self.module_root / (wiki + '/README.md')), '# Router\n')
+        self.write(str(self.module_root / (wiki + '/guide.md')), '# Guide\nModule.\n')
+        self.save_configs()
+        self.assertEqual(self.call_main('check')[0], 0)
+        if alias:
+            target = self.write(str(self.module_root / 'docs/routed.md'), '# Alias target\n')
+            self.symlink(self.module_root / relative, target)
+        else:
+            self.write(str(self.module_root / relative), '# Extra\n')
+        if routed:
+            self.inner_cfg['topics']['guide']['sources'].append({'path': relative})
+        self.save_configs()
+        code, out, err = self.call_main('check')
+        with self.subTest(stage='unindexed' if index else 'unrouted'):
+            self.assertEqual((code, err), (1, ''), out)
+            self.assertIn('FAIL mount kb: ' + relative + ': ' + reason, out)
+            self.assertNotIn('FAIL mount kb: ' + relative.lower() + ':', out)
+        if index:
+            # References retain the on-disk case and wiki-relative spelling.
+            self.write(str(self.module_root / (wiki + '/README.md')), '# Router\n' + index + '\n')
+        else:
+            self.inner_cfg['unrouted'] = {relative: 'Deliberate lexical exception'}
+            self.save_configs()
+            code, out, err = self.call_main('check')
+            self.assertEqual((code, err), (0, ''), out)
+            self.inner_cfg.pop('unrouted')
+            # Physical matching must still recognize a routed alias target.
+            source = 'docs/routed.md' if alias else relative
+            self.inner_cfg['topics']['guide']['sources'].append({'path': source})
+            self.save_configs()
+        code, out, err = self.call_main('check')
+        self.assertEqual((code, err), (0, ''), out)
+        self.assertTrue(out.endswith('\nok\n'), out)
+
+    def membership_matrix(self):
+        cases = [('Wiki', 'Wiki/history', 'Wiki/extra.md', 'wiki page no topic loads', '', False),
+                 ('wiki', 'wiki/HiStOrY', 'wiki/HiStOrY/log.md',
+                  'history file not indexed', 'HiStOrY/log.md', False),
+                 ('wiki', 'wiki/HiStOrY', 'wiki/HiStOrY/log.md',
+                  'history file not indexed', 'HiStOrY/log.md', True)]
+        for wiki, history, relative, reason, index, routed in cases:
+            with self.subTest(wiki=wiki, history=history, routed=routed):
+                self.membership_case(wiki, history, relative, reason, index, routed=routed)
+
+    def simulated_windows_normcase(self):
+        # Simulate Windows case normalization on the real host filesystem.
+        # Adapt separators only; this is not native Windows runtime evidence.
+        native_normcase = ntpath.normcase
+        return patch.object(router.os.path, 'normcase',
+                            side_effect=lambda path: native_normcase(path).replace('\\', os.sep))
+
+    def test_real_platform_membership(self):
+        # Unpatched: exercises actual Windows semantics when run by Windows CI.
+        self.membership_matrix()
+
+    def test_simulated_windows_membership(self):
+        with self.simulated_windows_normcase():
+            self.membership_matrix()
+
+    def test_real_platform_routed_alias(self):
+        self.membership_case('Wiki', 'Wiki/history', 'Wiki/extra.md', 'wiki page no topic loads', alias=True)
+
+    def test_simulated_windows_routed_alias(self):
+        with self.simulated_windows_normcase():
+            self.membership_case('Wiki', 'Wiki/history', 'Wiki/extra.md', 'wiki page no topic loads', alias=True)
+
+
+class MountUnicodeInputTests(MountFixture):
+    def test_escaped_surrogates_fail_safely_and_continue(self):
+        for field in ['mount name', 'topic name', 'description']:
+            for surrogate in ['\ud800', '\udfff']:
+                for command in ['list', 'check']:
+                    with self.subTest(field=field, scalar=ascii(surrogate), command=command):
+                        MountFixture.setUp(self)
+                        self.sibling()
+                        invalid = 'bad' + surrogate
+                        if field == 'mount name':
+                            self.cfg['mounts'] = {invalid: {'root': 'modules/kb-core'},
+                                                  'other': {'root': 'modules/other'}}
+                        elif field == 'topic name':
+                            self.inner_cfg['topics'] = {invalid: self.inner_cfg['topics']['guide']}
+                        else:
+                            self.inner_cfg['topics']['guide']['description'] = invalid
+                        # Valid UTF-8 JSON containing escapes, never a raw surrogate
+                        # in a fixture file, subprocess argument or test output.
+                        for owner, cfg in [(self.root, self.cfg), (self.module_root, self.inner_cfg)]:
+                            self.write(str(owner / 'wiki/ai-context.json'), json.dumps(cfg, ensure_ascii=True))
+                        result = self.cli(command)
+                        with self.subTest(stage='invalid-entry'):
+                            self.assertEqual((result.returncode, 'Traceback' in result.stderr,
+                                              'other/guide' in result.stdout), (1, False, True),
+                                             result.stdout + result.stderr)
+                            diagnostic = result.stdout + result.stderr
+                            self.assertIn('FAIL mount ', diagnostic)
+                            self.assertIn({'mount name': 'name', 'topic name': 'topics',
+                                           'description': 'description'}[field], diagnostic)
+                        healthy = self.cli('other/guide')
+                        self.assertEqual((healthy.returncode, healthy.stderr), (0, ''))
+                        self.assertIn('Other.', healthy.stdout)
+
+    def test_ordinary_unicode_and_escaped_pairs_remain_valid(self):
+        self.sibling()
+        mount, topic, description = '知識🚀', '指南🌍', '操作說明 café 🧭'
+        self.cfg['mounts'] = {mount: {'root': 'modules/kb-core'},
+                              'other': {'root': 'modules/other'}}
+        self.inner_cfg['topics'] = {topic: {'description': description,
+                                           'sources': [{'path': 'wiki/guide.md'}]}}
+        self.write('modules/kb-core/AGENTS.md', '`' + topic + '`\n')
+        for escaped in [True, False]:
+            with self.subTest(escaped_json=escaped):
+                for owner, cfg in [(self.root, self.cfg), (self.module_root, self.inner_cfg)]:
+                    self.write(str(owner / 'wiki/ai-context.json'), json.dumps(cfg, ensure_ascii=escaped))
+                listed = self.cli('list')
+                self.assertEqual((listed.returncode, listed.stderr), (0, ''))
+                self.assertIn(f'{mount + "/" + topic:18} {description} [modules/kb-core]', listed.stdout)
+                checked = self.cli('check')
+                self.assertEqual((checked.returncode, checked.stderr), (0, ''), checked.stdout)
+                selected = self.cli(mount + '/' + topic, 'other/guide')
+                self.assertEqual((selected.returncode, selected.stderr), (0, ''))
+                self.assertIn('Module.', selected.stdout)
+                self.assertIn('Other.', selected.stdout)
 
 
 if __name__ == '__main__':

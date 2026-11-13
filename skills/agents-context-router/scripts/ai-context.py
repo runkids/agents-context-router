@@ -100,7 +100,7 @@ def inventory_name(path, root):
 def diagnostic(value):
     """Keep a mounted diagnostic on one line without changing ordinary Unicode."""
     return ''.join(f'\\x{ord(c):02x}' if unicodedata.category(c) == 'Cc' else c
-                   for c in str(value))
+                   for c in str(value)).encode('utf-8', 'backslashreplace').decode('utf-8')
 
 
 def configured_path(value, root, field, allow_root=False):
@@ -121,7 +121,7 @@ class MissingMount(ValueError):
 
 def valid_mount_name(name):
     return (isinstance(name, str) and bool(name) and name not in ('.', '..')
-            and not any(c in '/\\' or c.isspace() or unicodedata.category(c) == 'Cc' for c in name))
+            and not any(c in '/\\' or c.isspace() or unicodedata.category(c) in ('Cc', 'Cs') for c in name))
 
 
 def mount_entries(cfg, root=None):
@@ -138,7 +138,7 @@ def mount_entries(cfg, root=None):
             if isinstance(declaration, dict) and 'root' in declaration:
                 mounted_root = os.path.realpath(configured_path(declaration['root'], root, 'root'))
             if not valid_mount_name(name):
-                raise ValueError('name: expected a nonempty single segment without whitespace or controls')
+                raise ValueError('name: expected a nonempty single segment without whitespace, controls or surrogates')
             if not isinstance(declaration, dict):
                 raise ValueError('declaration: expected an object')
             if 'root' not in declaration:
@@ -188,12 +188,15 @@ def validate_mounted_cfg(cfg, root):
         raise ValueError('unrouted: expected an object')
     for name, topic in topics.items():
         field = f'topics.{name}'
-        if not isinstance(name, str) or not name:
-            raise ValueError('topics: expected nonempty topic names')
+        if (not isinstance(name, str) or not name
+                or any(unicodedata.category(c) == 'Cs' for c in name)):
+            raise ValueError('topics: expected nonempty topic names without surrogates')
         if not isinstance(topic, dict):
             raise ValueError(f'{field}: expected an object')
-        if not isinstance(topic.get('description'), str):
-            raise ValueError(f'{field}.description: expected a string')
+        description = topic.get('description')
+        if (not isinstance(description, str)
+                or any(unicodedata.category(c) == 'Cs' for c in description)):
+            raise ValueError(f'{field}.description: expected a string without surrogates')
         if 'maxBytes' in topic:
             cap(topic['maxBytes'], field + '.maxBytes')
         sources = topic.get('sources')
@@ -391,11 +394,11 @@ def orphans(cfg, reference_text='', root=None, excluded_roots=()):
             # Membership and exemptions follow the scanned path, not its target.
             if root is not None and scanned in exemptions:
                 continue
-            if rel.startswith(history + '/') or (root is not None and history == '.'):
+            if scanned.startswith(history + '/') or (root is not None and history == '.'):
                 if (os.path.relpath(rel, wiki).replace(os.sep, '/') not in router_text
                         and rel not in router_text):
                     bad.append(f'{rel}: history file not indexed in {router}')
-            elif rel.startswith(wiki + '/') or (root is not None and wiki == '.'):
+            elif scanned.startswith(wiki + '/') or (root is not None and wiki == '.'):
                 if (scanned != router and identity not in routed
                         and (root is None or scanned != root_file)):
                     bad.append(f'{rel}: wiki page no topic loads (map it, or list it under "unrouted" with a reason)')
