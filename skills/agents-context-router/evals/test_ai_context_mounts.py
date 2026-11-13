@@ -7,7 +7,6 @@ import ntpath
 import os
 from pathlib import Path
 import shutil
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -182,9 +181,7 @@ class MountRoutingTests(MountFixture):
         script = self.root / 'scripts/ai-context.py'
         script.parent.mkdir()
         shutil.copyfile(SCRIPT, script)
-        env = {k: v for k, v in os.environ.items() if k not in ('AI_CONTEXT_ROOT', 'AI_CONTEXT_CONFIG')}
-        result = subprocess.run([sys.executable, str(script), 'kb/guide'], cwd=nested,
-                                env=env, capture_output=True, encoding='utf-8')
+        result = run_router(script, 'kb/guide', cwd=nested)
         self.assertEqual((result.returncode, result.stderr), (0, ''))
         self.assertIn('Module.', result.stdout)
         for literal in ['~', '$MOUNT_ROOT']:
@@ -1128,15 +1125,13 @@ class MountCompatibilityTests(MountFixture):
 
     def test_routed_fixture_mount(self):
         fixture = SKILL / 'evals/fixtures/routed'
-        env = {key: value for key, value in os.environ.items()
-               if key not in ('AI_CONTEXT_ROOT', 'AI_CONTEXT_CONFIG')}
-        env.update(AI_CONTEXT_ROOT=str(fixture), AI_CONTEXT_CONFIG=str(fixture / 'wiki/ai-context.json'))
+        overrides = {'AI_CONTEXT_ROOT': str(fixture),
+                     'AI_CONTEXT_CONFIG': str(fixture / 'wiki/ai-context.json')}
         mounted = '<!-- modules/kb-core/wiki/guide.md -->\n# Guide\n\nMounted module knowledge.\n'
         for script in [SCRIPT, fixture / 'scripts/ai-context.py']:
             with self.subTest(script=script):
                 def run(*args):
-                    return subprocess.run([sys.executable, str(script), *args], env=env,
-                                          cwd=self.parent, capture_output=True, encoding='utf-8')
+                    return run_router(script, *args, overrides=overrides, cwd=self.parent)
                 listed = run('list')
                 self.assertEqual((listed.returncode, listed.stderr), (0, ''), listed.stdout)
                 self.assertIn(f'{"kb/guide":18} Module guide [modules/kb-core]', listed.stdout.splitlines())
@@ -1549,6 +1544,166 @@ class MountSurrogatePathTests(MountFixture):
                 self.assertEqual((selected.returncode, selected.stderr), (0, ''))
                 self.assertEqual(selected.stdout, '<!-- modules/知識🚀/wiki/指南🌍.md -->\n# Guide\nModule.\n\n'
                                  '<!-- modules/other/wiki/guide.md -->\n# Guide\nOther.\n')
+
+
+class LegacyInventoryPolicyTests(MountFixture):
+    def test_legacy_dot_wiki_skip_dirs_preserves_base_success(self):
+        shutil.rmtree(self.root / 'modules')
+        self.cfg.update(wikiDir='.', routerFile='wiki/README.md',
+                        historyDir='wiki/history', skipDirs=['generated'])
+        self.write('generated/AGENTS.md', '# Generated instructions\n')
+        for empty_mounts in [False, True]:
+            with self.subTest(empty_mounts=empty_mounts):
+                self.cfg.pop('mounts', None)
+                if empty_mounts:
+                    self.cfg['mounts'] = {}
+                self.cfg['skipDirs'] = ['generated']
+                self.write('wiki/ai-context.json', json.dumps(self.cfg))
+                with self.subTest(stage='base-success'):
+                    result = self.cli('check')
+                    self.assertEqual((result.returncode, result.stderr), (0, ''), result.stdout)
+                    self.assertTrue(result.stdout.endswith('\nok\n'), result.stdout)
+                    self.assertNotIn('root(s)', result.stdout)
+                self.cfg['skipDirs'] = []
+                self.write('wiki/ai-context.json', json.dumps(self.cfg))
+                with self.subTest(stage='unskipped-negative'):
+                    self.assert_failure(self.cli('check'),
+                                        'FAIL generated/AGENTS.md: scoped instructions no topic loads')
+                self.cfg['topics']['guide']['sources'].append({'path': 'generated/AGENTS.md'})
+                self.write('wiki/ai-context.json', json.dumps(self.cfg))
+                with self.subTest(stage='explicit-route'):
+                    routed = self.cli('check')
+                    self.assertEqual((routed.returncode, routed.stderr), (0, ''), routed.stdout)
+                self.cfg['topics']['guide']['sources'].pop()
+
+    def test_legacy_builtin_wiki_scope_stays_unchanged(self):
+        for wiki, page in [('.', 'vendor/extra.md'), ('knowledge', 'knowledge/vendor/extra.md'),
+                           ('.knowledge', '.knowledge/extra.md'), ('vendor', 'vendor/extra.md'),
+                           ('vendor/knowledge', 'vendor/knowledge/extra.md'),
+                           ('.cache/knowledge', '.cache/knowledge/extra.md')]:
+            with self.subTest(wiki=wiki, page=page):
+                MountFixture.setUp(self)
+                shutil.rmtree(self.root / 'modules')
+                self.cfg.pop('mounts')
+                index = 'wiki/README.md' if wiki == '.' else wiki + '/README.md'
+                self.cfg.update(wikiDir=wiki, routerFile=index, historyDir='logs')
+                self.write(index, '# Router\n')
+                self.write(page, '# Unmapped\n')
+                # Naming an indexed page preserves legacy built-in exemptions;
+                # it does not impose the new mounted wiki-membership contract.
+                self.write('wiki/guide.md', '# Guide\nLocal.\n' + page + '\n')
+                for indexed in [[], [page]]:
+                    with self.subTest(indexed=indexed):
+                        self.cfg['indexed'] = indexed
+                        self.write('wiki/ai-context.json', json.dumps(self.cfg))
+                        result = self.cli('check')
+                        self.assertEqual((result.returncode, result.stderr), (0, ''), result.stdout)
+                        self.assertTrue(result.stdout.endswith('\nok\n'), result.stdout)
+                self.write(page, '# Unmapped\n[Missing](missing.md)\n')
+                self.cfg['topics']['guide']['sources'].append({'path': page})
+                self.write('wiki/ai-context.json', json.dumps(self.cfg))
+                self.assert_failure(self.cli('check'), f"FAIL {page}:2: relative link 'missing.md'")
+
+
+class MountInventoryPolicyTests(MountFixture):
+    wiki_layouts = [('.', 'vendor/extra.md'), ('knowledge', 'knowledge/vendor/extra.md'),
+                    ('.knowledge', '.knowledge/extra.md'), ('vendor', 'vendor/extra.md'),
+                    ('vendor/knowledge', 'vendor/knowledge/extra.md'),
+                    ('.cache/knowledge', '.cache/knowledge/extra.md')]
+
+    def wiki_case(self, wiki, page):
+        MountFixture.setUp(self)
+        self.sibling()
+        index = 'wiki/README.md' if wiki == '.' else wiki + '/README.md'
+        self.inner_cfg.update(wikiDir=wiki, routerFile=index, historyDir='logs', skipDirs=['*'])
+        self.write(str(self.module_root / index), '# Router\n')
+        self.write(str(self.module_root / page), '# Unmapped\n')
+        self.save_configs()
+
+    def test_history_directory_alias_keeps_lexical_index(self):
+        self.sibling()
+        self.write('modules/kb-core/logs/log.md', '# Log\n')
+        self.symlink(self.module_root / 'wiki/history', self.module_root / 'logs', directory=True)
+        for history in ['wiki/history', 'wiki\\history', str(self.module_root / 'wiki/history')]:
+            with self.subTest(historyDir=history):
+                self.inner_cfg['historyDir'] = history
+                self.save_configs()
+                for reference in ['[Log](history/log.md)', '[Log](../logs/log.md)', 'logs/log.md']:
+                    with self.subTest(stage='valid-index', reference=reference):
+                        self.write('modules/kb-core/wiki/README.md', '# Router\n' + reference + '\n')
+                        result = self.cli('check')
+                        self.assertEqual((result.returncode, result.stderr), (0, ''), result.stdout)
+                        self.assertTrue(result.stdout.endswith('\nok\n'), result.stdout)
+                self.write('modules/kb-core/wiki/README.md', '# Router\n')
+                with self.subTest(stage='unindexed-negative'):
+                    result = self.cli('check')
+                    self.assert_failure(result, 'FAIL mount kb: logs/log.md: history file not indexed in wiki/README.md')
+                    self.assertIn('other/guide', result.stdout)
+                    self.assertTrue(result.stdout.endswith('1 root(s) failed\n'), result.stdout)
+                self.write('modules/kb-core/wiki/README.md',
+                           '# Router\n[Log](history/log.md)\n[Missing](history/missing.md)\n')
+                with self.subTest(stage='lexical-link-negative'):
+                    result = self.cli('check')
+                    self.assert_failure(result, "FAIL mount kb: wiki/README.md:3: relative link 'history/missing.md'")
+                    self.assertNotIn('history file not indexed', result.stdout)
+
+    def test_mounted_wiki_overrides_builtin_directory_pruning(self):
+        layouts = self.wiki_layouts + [('.', name + '/extra.md') for name in
+                                      ['node_modules', 'dist', 'build', 'target', '.venv', '.drafts']]
+        for wiki, page in layouts:
+            with self.subTest(wiki=wiki, page=page):
+                self.wiki_case(wiki, page)
+                result = self.cli('check')
+                self.assert_failure(result, f'FAIL mount kb: {page}: wiki page no topic loads')
+                self.assertIn('other/guide', result.stdout)
+                self.assertTrue(result.stdout.endswith('1 root(s) failed\n'), result.stdout)
+
+    def test_indexed_wiki_pages_keep_the_orphan_rule(self):
+        for wiki, page in self.wiki_layouts:
+            with self.subTest(wiki=wiki, page=page):
+                self.wiki_case(wiki, page)
+                self.inner_cfg['indexed'] = [page]
+                self.save_configs()
+                with self.subTest(stage='indexed-and-orphan'):
+                    result = self.cli('check')
+                    self.assert_failure(result, f'FAIL mount kb: {page}: indexed page not named',
+                                        f'FAIL mount kb: {page}: wiki page no topic loads')
+                self.write('modules/kb-core/wiki/guide.md', '# Guide\nModule.\n' + page + '\n')
+                with self.subTest(stage='named-still-unrouted'):
+                    result = self.cli('check')
+                    self.assert_failure(result, f'FAIL mount kb: {page}: wiki page no topic loads')
+                    self.assertNotIn('indexed page not named', result.stdout)
+
+    def test_mounted_wiki_routes_exceptions_and_nonwiki_controls(self):
+        for wiki, page in self.wiki_layouts:
+            with self.subTest(wiki=wiki, page=page):
+                self.wiki_case(wiki, page)
+                self.inner_cfg['unrouted'] = {page: 'Deliberate wiki exception'}
+                self.save_configs()
+                with self.subTest(stage='excepted'):
+                    result = self.cli('check')
+                    self.assertEqual((result.returncode, result.stderr), (0, ''), result.stdout)
+                self.inner_cfg.pop('unrouted')
+                self.inner_cfg['topics']['guide']['sources'].append({'path': page})
+                self.save_configs()
+                with self.subTest(stage='routed'):
+                    result = self.cli('check')
+                    self.assertEqual((result.returncode, result.stderr), (0, ''), result.stdout)
+                self.write(str(self.module_root / page), '# Unmapped\n[Missing](missing.md)\n')
+                with self.subTest(stage='routed-link-negative'):
+                    self.assert_failure(self.cli('check'), f"FAIL mount kb: {page}:2: relative link 'missing.md'")
+        self.wiki_case('knowledge', 'knowledge/guide.md')
+        self.inner_cfg['topics']['guide']['sources'].append({'path': 'knowledge/guide.md'})
+        self.write('modules/kb-core/vendor/AGENTS.md', '# Unowned generated instructions\n')
+        self.write('modules/kb-core/.git/internal/AGENTS.md', '# Metadata\n')
+        self.inner_cfg['skipDirs'] = []
+        self.save_configs()
+        result = self.cli('check')
+        self.assertEqual((result.returncode, result.stderr), (0, ''), result.stdout)
+        self.inner_cfg['topics']['guide']['sources'].append({'path': 'vendor/AGENTS.md'})
+        self.write('modules/kb-core/vendor/AGENTS.md', '# Generated\n[Missing](missing.md)\n')
+        self.save_configs()
+        self.assert_failure(self.cli('check'), "FAIL mount kb: vendor/AGENTS.md:2: relative link 'missing.md'")
 
 
 if __name__ == '__main__':

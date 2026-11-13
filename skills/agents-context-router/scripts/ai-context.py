@@ -305,10 +305,18 @@ def skip_patterns(cfg):
     return [p.replace('\\', '/').rstrip('/') for p in value]
 
 
-def skipped_dir(rel, patterns, wiki, traversing=False):
+def wiki_path(rel, wiki, traversing=False, root=None):
+    """Wiki membership, optionally including ancestors needed for traversal."""
+    if root is not None:
+        rel = os.path.normcase(rel).replace(os.sep, '/')
+        wiki = inventory_name(wiki, root)
+    return ((root is not None and wiki == '.') or rel == wiki or rel.startswith(wiki + '/')
+            or (traversing and wiki.startswith(rel + '/')))
+
+
+def skipped_dir(rel, patterns, wiki, traversing=False, root=None):
     """Whether a directory is skipped; traversal may retain the path to the wiki."""
-    if (wiki == '.' or rel == wiki or rel.startswith(wiki + '/')
-            or (traversing and wiki.startswith(rel + '/'))):
+    if wiki_path(rel, wiki, traversing=traversing, root=root):
         return False
     parts = rel.split('/')
     return any(path == p or fnmatch.fnmatchcase(path, p)
@@ -318,6 +326,29 @@ def skipped_dir(rel, patterns, wiki, traversing=False):
 def child_dir(base, name):
     """The repo-relative path of directory name under walk directory base."""
     return name if base == '.' else f'{base}/{name}'
+
+
+def inventory_exemptions(paths, owner):
+    exemptions = {inventory_name(path, owner) for path in paths}
+    for path in paths:
+        path = os.path.join(owner, path.replace('\\', '/'))
+        # Resolve parent aliases but retain the configured file's own name.
+        path = os.path.join(os.path.realpath(os.path.dirname(path)), os.path.basename(path))
+        exemptions.add(os.path.normcase(os.path.relpath(path, os.path.realpath(owner))).replace(os.sep, '/'))
+    return exemptions
+
+
+def history_indexed(path, rel, wiki, router_text, cfg, root=None):
+    references = [os.path.relpath(rel, wiki).replace(os.sep, '/'), rel]
+    if root is not None:
+        configured_wiki = cfg.get('wikiDir', 'wiki')
+        configured_history = cfg.get('historyDir', f'{configured_wiki}/history')
+        lexical_wiki, lexical_history = (os.path.abspath(os.path.join(root, name.replace('\\', '/')))
+                                         for name in (configured_wiki, configured_history))
+        lexical = os.path.join(lexical_history, os.path.relpath(path, os.path.realpath(lexical_history)))
+        references += [os.path.relpath(lexical, lexical_wiki).replace(os.sep, '/'),
+                       os.path.relpath(lexical, root).replace(os.sep, '/')]
+    return any(reference in router_text for reference in references)
 
 
 def orphans(cfg, reference_text='', root=None, excluded_roots=()):
@@ -340,12 +371,7 @@ def orphans(cfg, reference_text='', root=None, excluded_roots=()):
                 configured_path(value, owner, field, allow_root=True)
         except ValueError as error:
             return [str(error)]
-        exemptions = {inventory_name(path, owner) for path in (root_file, router)}
-        for path in (root_file, router):
-            path = os.path.join(owner, path.replace('\\', '/'))
-            # Resolve parent aliases but retain the configured file's own name.
-            path = os.path.join(os.path.realpath(os.path.dirname(path)), os.path.basename(path))
-            exemptions.add(os.path.normcase(os.path.relpath(path, os.path.realpath(owner))).replace(os.sep, '/'))
+        exemptions = inventory_exemptions((root_file, router), owner)
         routed = {inventory_name(path, owner) for path in routed}
         wiki, history, root_file = (inventory_name(path, owner) for path in (wiki, history, root_file))
     allowed = {p.replace('\\', '/'): reason for p, reason in cfg.get('unrouted', {}).items()}
@@ -367,10 +393,11 @@ def orphans(cfg, reference_text='', root=None, excluded_roots=()):
         dirs[:] = [x for x in dirs if x != '.git' and
                    not excluded_path(os.path.join(d, x), excluded_roots) and
                    (root is None or inside_root(os.path.join(d, x), owner, allow_root=True)) and
-                   ((x not in skip and not x.startswith('.')) or
+                   ((root is not None and wiki_path(child_dir(base, x), wiki, traversing=True, root=root)) or
+                    (x not in skip and not x.startswith('.')) or
                     may_hold_indexed(child_dir(base, x), prefixes)) and
-                   not skipped_dir(child_dir(base, x), skip_dirs, wiki, traversing=True)]
-        if base != '.' and skipped_dir(base, skip_dirs, wiki):
+                   not skipped_dir(child_dir(base, x), skip_dirs, wiki, traversing=True, root=root)]
+        if base != '.' and skipped_dir(base, skip_dirs, wiki, root=root):
             continue
         for f in files:
             path = os.path.join(d, f)
@@ -387,14 +414,14 @@ def orphans(cfg, reference_text='', root=None, excluded_roots=()):
                     and identity not in routed and rel not in reference_text
                     and not any(isinstance(reason, str) and reason.strip() for reason in reasons)):
                 bad.append(f'{rel}: indexed page not named (name it in a topic page, route it, or list it under "unrouted" with a reason)')
-            if (reasons or any(x in skip or x.startswith('.') for x in rel.split('/')[:-1])):
+            if (reasons or (not (root is not None and wiki_path(scanned, wiki, root=root))
+                            and any(x in skip or x.startswith('.') for x in rel.split('/')[:-1]))):
                 continue
             # Membership and exemptions follow the scanned path, not its target.
             if root is not None and scanned in exemptions:
                 continue
             if scanned.startswith(history + '/') or (root is not None and history == '.'):
-                if (os.path.relpath(rel, wiki).replace(os.sep, '/') not in router_text
-                        and rel not in router_text):
+                if not history_indexed(path, rel, wiki, router_text, cfg, root=root):
                     bad.append(f'{rel}: history file not indexed in {router}')
             elif scanned.startswith(wiki + '/') or (root is not None and wiki == '.'):
                 if (scanned != router and identity not in routed
@@ -919,11 +946,11 @@ def reference_label(text, start, end):
 def link_problems(cfg, root=None, excluded_roots=()):
     """Check links in routed sources, wiki pages, and indexed pages."""
     owner = ROOT if root is None else root
-    paths = {s['path'].replace('\\', '/') for t in cfg['topics'].values() for s in t['sources']}
-    sources = {os.path.abspath(os.path.join(owner, p)) for p in paths}
+    sources = {os.path.abspath(os.path.join(owner, s['path'].replace('\\', '/')))
+               for t in cfg['topics'].values() for s in t['sources']}
     wiki = cfg.get('wikiDir', 'wiki')
     router = os.path.abspath(os.path.join(owner, cfg.get('routerFile', f'{wiki}/README.md').replace('\\', '/')))
-    paths.add(router)
+    paths = sources | {router}
     bad, indexed_paths = [], set()
     indexed = cfg.get('indexed', [])
     if isinstance(indexed, list) and indexed and all(isinstance(pattern, str) for pattern in indexed):
@@ -938,14 +965,14 @@ def link_problems(cfg, root=None, excluded_roots=()):
                     rel = child_dir(base, name)
                     if (name.endswith('.md') and any(fnmatch.fnmatch(rel, pattern) for pattern in indexed)
                             and not excluded_path(os.path.join(directory, name), excluded_roots)
-                            and not skipped_dir(rel, skip_dirs, wiki)):
+                            and not skipped_dir(rel, skip_dirs, wiki, root=root)):
                         bad.append(f'{rel}: indexed page is not a file inside repo')
             dirs[:] = [name for name in dirs if name != '.git' and
                        not excluded_path(os.path.join(directory, name), excluded_roots) and
                        (root is None or inside_root(os.path.join(directory, name), owner, allow_root=True)) and
                        may_hold_indexed(child_dir(base, name), prefixes) and
-                       not skipped_dir(child_dir(base, name), skip_dirs, wiki, traversing=True)]
-            if base != '.' and skipped_dir(base, skip_dirs, wiki):
+                       not skipped_dir(child_dir(base, name), skip_dirs, wiki, traversing=True, root=root)]
+            if base != '.' and skipped_dir(base, skip_dirs, wiki, root=root):
                 continue
             for name in files:
                 if not name.endswith('.md'):
