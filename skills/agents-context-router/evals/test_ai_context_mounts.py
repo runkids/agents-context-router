@@ -584,7 +584,7 @@ class MountBoundaryTests(MountFixture):
                 entry = router.mount_entries(self.cfg, root=str(self.root))[0]
                 if operation == 'kernel':
                     self.sibling()
-                real_stat, real_open = os.stat, open
+                real_stat, real_open, real_isfile = os.stat, open, os.path.isfile
                 swapped, opened = [], []
                 def swapping_stat(path, *args, **kwargs):
                     info = real_stat(path, *args, **kwargs)
@@ -594,6 +594,13 @@ class MountBoundaryTests(MountFixture):
                         target.unlink()
                         self.symlink(target, outside)
                     return info
+                def swapping_isfile(path):
+                    regular = real_isfile(path)
+                    # Windows' native predicate bypasses os.stat. Retain its
+                    # real result, then exercise the same real-stat boundary.
+                    if regular and not swapped:
+                        swapping_stat(path)
+                    return regular
                 def observed_open(path, *args, **kwargs):
                     if os.path.normcase(os.path.realpath(path)) == os.path.normcase(str(outside)):
                         opened.append(str(path))
@@ -612,7 +619,8 @@ class MountBoundaryTests(MountFixture):
                             output = json.dumps(router.load_mount(entry))
                             code = 0
                         elif operation == 'links':
-                            errors = router.link_problems(cfg, root=str(owner) if mounted else None)
+                            with patch.object(router.os.path, 'isfile', side_effect=swapping_isfile):
+                                errors = router.link_problems(cfg, root=str(owner) if mounted else None)
                             code, output = int(bool(errors)), '\n'.join(errors)
                         else:
                             code, out, err = self.call_main('check')
