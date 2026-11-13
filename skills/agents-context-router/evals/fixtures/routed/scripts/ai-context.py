@@ -383,11 +383,12 @@ def orphans(cfg, reference_text='', root=None, excluded_roots=()):
                 continue
             if root is not None and identity in (root_file, router):
                 continue
-            if identity.startswith(history + '/') or (root is not None and history == '.'):
-                if (os.path.relpath(identity, wiki).replace(os.sep, '/') not in router_text
-                        and rel not in router_text and identity not in router_text):
+            # Membership follows the scanned path, not a file alias's target.
+            if rel.startswith(history + '/') or (root is not None and history == '.'):
+                if (os.path.relpath(rel, wiki).replace(os.sep, '/') not in router_text
+                        and rel not in router_text):
                     bad.append(f'{rel}: history file not indexed in {router}')
-            elif identity.startswith(wiki + '/') or (root is not None and wiki == '.'):
+            elif rel.startswith(wiki + '/') or (root is not None and wiki == '.'):
                 if (identity != router and identity not in routed
                         and (root is None or identity != root_file)):
                     bad.append(f'{rel}: wiki page no topic loads (map it, or list it under "unrouted" with a reason)')

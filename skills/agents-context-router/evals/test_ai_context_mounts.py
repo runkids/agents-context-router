@@ -1156,5 +1156,67 @@ class MountCompatibilityTests(MountFixture):
                 self.assertTrue(checked.stdout.endswith('\nok\n'), checked.stdout)
 
 
+class MountAliasTests(MountFixture):
+    def checked_alias(self, expected, *details):
+        result = self.cli('check')
+        self.assertEqual((result.returncode, result.stderr), (expected, ''), result.stdout)
+        for detail in details:
+            self.assertIn(detail, result.stdout)
+        if expected == 0:
+            self.assertTrue(result.stdout.endswith('\nok\n'), result.stdout)
+
+    def alias_membership(self, owner, cfg, mounted):
+        prefix = 'FAIL mount kb: ' if mounted else 'FAIL '
+        cases = [('wiki/extra.md', 'docs/unlisted.md', '', 'wiki page no topic loads'),
+                 ('wiki/history/alias.md', 'wiki/guide.md', '', 'history file not indexed'),
+                 ('wiki/extra.md', 'wiki/history/log.md', 'history/log.md\n',
+                  'wiki page no topic loads')]
+        for alias_name, target_name, index, reason in cases:
+            with self.subTest(mounted=mounted, alias=alias_name, target=target_name):
+                target = owner / target_name
+                created = not target.exists()
+                if created:
+                    self.write(str(target), '# Alias target\n')
+                alias = owner / alias_name
+                self.symlink(alias, target)
+                try:
+                    self.write(str(owner / 'wiki/README.md'), '# Router\n' + index)
+                    self.write(str(owner / 'wiki/ai-context.json'), json.dumps(cfg))
+                    self.checked_alias(1, prefix + alias_name + ': ' + reason)
+                    if reason == 'history file not indexed':
+                        self.write(str(owner / 'wiki/README.md'), '# Router\nhistory/alias.md\n')
+                    else:
+                        cfg['topics']['guide']['sources'].append({'path': alias_name})
+                        self.write(str(owner / 'wiki/ai-context.json'), json.dumps(cfg))
+                    self.checked_alias(0)
+                finally:
+                    cfg['topics']['guide']['sources'] = [{'path': 'wiki/guide.md'}]
+                    alias.unlink()
+                    if created:
+                        target.unlink()
+                    self.write(str(owner / 'wiki/README.md'), '# Router\n')
+                    self.write(str(owner / 'wiki/ai-context.json'), json.dumps(cfg))
+
+    def test_outer_alias_membership(self):
+        # Also run unchanged against main's executable: no mounts or new API.
+        self.cfg.pop('mounts')
+        shutil.rmtree(self.root / 'modules')
+        self.alias_membership(self.root, self.cfg, mounted=False)
+
+    def test_mounted_alias_membership(self):
+        self.alias_membership(self.module_root, self.inner_cfg, mounted=True)
+
+    def test_mounted_routed_aliases_keep_physical_matching(self):
+        target = self.write('modules/kb-core/docs/routed.md', '# Routed\n')
+        self.symlink(self.module_root / 'wiki/alias.md', target)
+        # Routing either spelling makes this one physical page reachable.
+        for source in ['docs/routed.md', 'wiki/alias.md', str(target)]:
+            with self.subTest(source=source):
+                self.inner_cfg['topics']['guide']['sources'] = [
+                    {'path': 'wiki/guide.md'}, {'path': source}]
+                self.save_configs()
+                self.checked_alias(0)
+
+
 if __name__ == '__main__':
     unittest.main()
