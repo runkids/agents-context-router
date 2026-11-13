@@ -1087,5 +1087,74 @@ class MountCheckTests(MountFixture):
         self.assertIn(f'{"other/guide":18} ', out)
 
 
+class MountCompatibilityTests(MountFixture):
+    def test_absent_and_empty_mounts_match(self):
+        # No static module should influence the original single-root check.
+        shutil.rmtree(self.root / 'modules')
+        self.cfg.pop('mounts')
+        self.cfg['topics']['ops/guide'] = copy.deepcopy(self.cfg['topics']['guide'])
+        self.write('AGENTS.md', '`guide`\n`ops/guide`\n')
+        local_body = '<!-- wiki/guide.md -->\n# Guide\nLocal.\n'
+        commands = [(), ('list',), ('guide',), ('ops/guide',),
+                    ('guide', 'ops/guide'), ('guide', 'guide'),
+                    ('unknown',), ('check',)]
+        for args in commands:
+            with self.subTest(args=args):
+                self.cfg.pop('mounts', None)
+                self.write('wiki/ai-context.json', json.dumps(self.cfg))
+                absent = self.cli(*args)
+                self.cfg['mounts'] = {}
+                self.write('wiki/ai-context.json', json.dumps(self.cfg))
+                empty = self.cli(*args)
+                self.assertEqual((absent.returncode, absent.stdout, absent.stderr),
+                                 (empty.returncode, empty.stdout, empty.stderr))
+                if args == ('unknown',):
+                    self.assertEqual((empty.returncode, empty.stdout, empty.stderr),
+                                     (1, '', "unknown topic 'unknown'; rerun this script with list\n"))
+                else:
+                    self.assertEqual((empty.returncode, empty.stderr), (0, ''), empty.stdout)
+                    if args in [(), ('list',)]:
+                        self.assertEqual(empty.stdout, f'{"guide":18} Project guide\n'
+                                         f'{"ops/guide":18} Project guide\n')
+                    elif args == ('check',):
+                        self.assertTrue(empty.stdout.endswith('\nok\n'), empty.stdout)
+                        self.assertNotIn('root(s)', empty.stdout)
+                    else:
+                        self.assertEqual(empty.stdout,
+                                         '\n\n'.join([local_body.rstrip('\n')] * len(args)) + '\n')
+        self.write('wiki/ai-context.json', '{malformed existing config')
+        version = self.cli('--version')
+        expected_version = json.loads((SKILL.parents[1] / 'package.json').read_text(encoding='utf-8'))['version']
+        self.assertEqual((version.returncode, version.stdout, version.stderr),
+                         (0, f'agents-context-router {expected_version}\n', ''))
+
+    def test_routed_fixture_mount(self):
+        fixture = SKILL / 'evals/fixtures/routed'
+        env = {key: value for key, value in os.environ.items()
+               if key not in ('AI_CONTEXT_ROOT', 'AI_CONTEXT_CONFIG')}
+        env.update(AI_CONTEXT_ROOT=str(fixture), AI_CONTEXT_CONFIG=str(fixture / 'wiki/ai-context.json'))
+        mounted = '<!-- modules/kb-core/wiki/guide.md -->\n# Guide\n\nMounted module knowledge.\n'
+        for script in [SCRIPT, fixture / 'scripts/ai-context.py']:
+            with self.subTest(script=script):
+                def run(*args):
+                    return subprocess.run([sys.executable, str(script), *args], env=env,
+                                          cwd=self.parent, capture_output=True, encoding='utf-8')
+                listed = run('list')
+                self.assertEqual((listed.returncode, listed.stderr), (0, ''), listed.stdout)
+                self.assertIn(f'{"kb/guide":18} Module guide [modules/kb-core]', listed.stdout.splitlines())
+                module = run('kb/guide')
+                self.assertEqual((module.returncode, module.stdout, module.stderr), (0, mounted, ''))
+                local = run('build-deploy')
+                self.assertEqual((local.returncode, local.stderr), (0, ''), local.stdout)
+                self.assertTrue(local.stdout.startswith('<!-- wiki/build-and-deploy.md -->\n# Build and Deploy\n'))
+                mixed = run('build-deploy', 'kb/guide')
+                self.assertEqual((mixed.returncode, mixed.stdout, mixed.stderr),
+                                 (0, local.stdout.rstrip('\n') + '\n\n' + mounted, ''))
+                checked = run('check')
+                self.assertEqual((checked.returncode, checked.stderr), (0, ''), checked.stdout)
+                self.assertIn(f'{"kb/guide":18} ', checked.stdout)
+                self.assertTrue(checked.stdout.endswith('\nok\n'), checked.stdout)
+
+
 if __name__ == '__main__':
     unittest.main()

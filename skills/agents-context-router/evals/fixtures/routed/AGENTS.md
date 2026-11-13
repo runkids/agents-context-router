@@ -36,10 +36,12 @@ python3 scripts/ai-context.py check     # validate paths, headings and byte budg
 
 Pick the single closest topic. Load a second one only for a task that really crosses two seams.
 
+This table lists local topics; use `list` for mounted topics such as `kb/guide`, whose config, instructions and index belong to their own root.
+
 When no topic fits, read `wiki/README.md`. To add a topic:
 1. Put the content in `wiki/`.
 2. Map it in `wiki/ai-context.json`.
-3. List it in both tables.
+3. List it in this root's two local tables.
 4. Run `check`.
 
 ## Verification

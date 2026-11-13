@@ -157,7 +157,33 @@ AI_CONTEXT_ROOT=/work/repo AI_CONTEXT_CONFIG=/work/settings/router.json \
 
 刻意保留的未路由檔案例外應放在 `"unrouted"` 中，使用精確路徑或 fnmatch glob，並為每項提供理由。例如，`"projects/*/AGENTS.md": "Agents load these scoped instructions by cwd."` 會豁免這些檔案。比對區分大小寫，鍵中的反斜線會正規化為 `/`。`*`、`?` 和方括號字元類別遵循 Python fnmatch 語義：`*` 可以跨越 `/`，因此該範例也會符合 `projects/team/api/AGENTS.md`；`**` 沒有特殊的遞迴意義。不論檔案是否存在，鍵既符合自身，也會作為模式參與比對：`wiki/file[1].md` 會同時豁免自身和 `wiki/file1.md`。使用 `wiki/file[[]1].md` 可豁免帶有字面方括號的檔名，而不會同時豁免 `wiki/file1.md`。未符合的未路由檔案仍會導致 `check` 失敗。
 
-對於不含指令的大型目錄樹，例如產生的輸出或證據傾印，可用 `"skipDirs": ["projects/*/artifacts"]`（預設 `[]`）讓 `check` 不再走訪它們。每項是相對儲存庫的目錄精確路徑或區分大小寫的 fnmatch glob，比對方式與 `"unrouted"` 的鍵相同（`*` 可跨越 `/`）。`check` 不會進入符合的目錄，因此除非有 topic 路由其中的頁面，這些頁面不會參與孤立頁面、indexed 與連結檢查。wiki 目錄一律會被走訪。
+對於不含指令的大型目錄樹，例如產生的輸出或證據傾印，可用 `"skipDirs": ["projects/*/artifacts"]`（預設 `[]`）讓 `check` 不再走訪它們。每項是相對儲存庫的目錄精確路徑或區分大小寫的 fnmatch glob，比對方式與 `"unrouted"` 的鍵相同（`*` 可跨越 `/`）。`check` 不會進入符合的目錄，因此除非頁面被 topic 明確引用或選作 router 索引，這些頁面不會參與孤立頁面、indexed 與連結檢查。每個根目錄的 wiki 都會被走訪，但掛載目錄樹會從外層掃描中排除，並接受獨立檢查。
+
+## 既有的 router 目錄樹
+
+要使用專案內已存在的獨立 router，請在選取的外層設定中加入此欄位：
+
+```json
+"mounts": {
+  "kb": { "root": "modules/kb-core" }
+}
+```
+
+內層設定預設是 `wiki/ai-context.json`；選用的 `"config": "context/router.json"` 可指定該根目錄內的其他設定。使用專案選定的腳本與環境：
+
+```bash
+python3 scripts/ai-context.py list
+python3 scripts/ai-context.py build-deploy kb/guide
+python3 scripts/ai-context.py check
+```
+
+`list` 會附加帶有 `[modules/kb-core]` 來源的 `kb/guide`，輸出註解使用相對外層根目錄的來源路徑。模組保留不帶前綴的 `guide`，以及自己的設定、指令與索引。外層表格只列本地 topic，掛載 topic 用 `list` 探索。`check` 各自使用每個根目錄的探索規則、位元組上限、孤立頁面／history／indexed／連結規則與例外。topic 依根目錄原生渲染的位元組數計量，包含原生來源註解；較長的掛載顯示路徑不會增加模組的計量值。kernel 文字計量保留首尾空白。超限時拆分 topic，不調高上限。
+
+掛載名稱必須是單一路徑段，不含斜線、反斜線、空白、控制字元、`.` 或 `..`；即使無法使用，`kb/` 仍會保留，禁止與本地 topic 衝突。本地 `kb` 和內層 `ops/guide` 仍有效。解析符號連結後，掛載根目錄必須嚴格位於外層根目錄之下；設定、指令、來源、相對連結與掃描都不能越過自己的根目錄。允許內部的絕對路徑與別名。相對 root 以選取的外層根目錄為基準，設定與文件以內層根目錄為基準，與 cwd、設定檔位置無關；不展開 `~` 或變數。內層 `mounts` 必須省略或為空。只讀取既有資料，不取得模組，也不執行模組腳本。
+
+外層的孤立頁面／indexed／wiki 連結自動掃描會排除掛載的實體目錄樹與別名，即使模組位於外層 wiki 中或內層設定無效。明確指定的外層來源與 router 索引仍會檢查。內部根目錄遺失時，`list` 輸出一條帶路徑的 `NOTICE`，沒有其他錯誤則回傳狀態0；`check` 與要求該掛載 topic 都會失敗。無效宣告／設定、越界目錄與巢狀掛載是錯誤，但 list/check 會繼續處理正常項目。topic 要求只讀取選取的掛載設定，所有名稱與本文成功前不輸出任何內容。check 最後只給出一個 `ok` 或失敗根目錄數。
+
+省略 mounts 或使用空物件可保留原有單根目錄行為；完整約定見 repo 內維護手冊。舊的腳本副本需要比對本地修改後主動更新，更新已安裝 skill 不會自動取代它們。保留專案設定與文件，用 `--version` 確認選取的副本。
 
 ## Repo 結構
 

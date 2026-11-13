@@ -24,6 +24,12 @@
       "prompt": "In ./routed, set up a shared ai-context.py script and its config outside the repo, with no local scripts directory. Adapt the kernel, maintenance manual and wiki index for that installation. Then file the existing notes/retry-policy.md into a topic by editing the external config and verify the router.",
       "expected_output": "External script and config selected with AI_CONTEXT_ROOT and AI_CONTEXT_CONFIG; no repo-local scripts directory. Kernel, manual and index commands use the shared script and environment; config references, including source-of-truth and topic-edit instructions, name the selected external config. Retry policy is routed through that config and discoverable in both tables. list, the retry-policy topic and check all pass using the external installation.",
       "files": ["fixtures/routed"]
+    },
+    {
+      "id": 5,
+      "prompt": "In ./routed, use the already-present modules/kb-core router through the project's kb mount. Show the local and mounted topics, render build-deploy together with kb/guide, and check each root's own rules and budgets. Explain what happens to list and check if that module root is temporarily missing; keep the existing data and topic ownership intact.",
+      "expected_output": "Use the selected project scripts/ai-context.py for list, build-deploy kb/guide and check. list includes kb/guide with modules/kb-core origin; mixed output retains each source path. Outer tables name only local topics; the module keeps its unqualified guide and own config/kernel/index. No copying inner topics into outer tables, module-script execution or acquisition. Native per-root budgets and independent discovery/inventory/link rules pass. A contained missing root gives list one path-bearing NOTICE/status0, but check and a requested kb/guide fail; invalid config, outside-root or nested mounts are errors. Restore any temporary fixture change and rerun check.",
+      "files": ["fixtures/routed"]
     }
   ]
 }
