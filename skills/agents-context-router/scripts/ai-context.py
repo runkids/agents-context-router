@@ -87,6 +87,16 @@ def inside_root(path, root, allow_root=False):
         return False
 
 
+def excluded_path(path, excluded_roots):
+    return any(inside_root(path, owner, allow_root=True) for owner in excluded_roots)
+
+
+def inventory_name(path, root):
+    """Physical owner-relative identity, never a replacement for a link's base."""
+    path = os.path.realpath(os.path.join(root, path.replace('\\', '/')))
+    return os.path.normcase(os.path.relpath(path, os.path.realpath(root))).replace(os.sep, '/')
+
+
 def diagnostic(value):
     """Keep a mounted diagnostic on one line without changing ordinary Unicode."""
     return ''.join(f'\\x{ord(c):02x}' if unicodedata.category(c) == 'Cc' else c
@@ -246,6 +256,10 @@ def section(src, root=None):
     path = os.path.realpath(os.path.join(root, src['path'].replace('\\', '/')))
     if not inside_root(path, root):
         raise ValueError(f'{src["path"]}: outside repo')
+    if not stat.S_ISREG(os.stat(path).st_mode):
+        raise ValueError(f'{src["path"]}: expected a regular file')
+    if not inside_root(path, root):
+        raise ValueError(f'{src["path"]}: outside repo')
     with open(path, encoding='utf-8') as f:
         lines = f.read().split('\n')
     if 'heading' not in src:
@@ -305,8 +319,9 @@ def child_dir(base, name):
     return name if base == '.' else f'{base}/{name}'
 
 
-def orphans(cfg, reference_text=''):
+def orphans(cfg, reference_text='', root=None, excluded_roots=()):
     """Docs that exist on disk but that no agent can reach through the router."""
+    owner = ROOT if root is None else root
     indexed = cfg.get('indexed', [])
     if not isinstance(indexed, list) or any(not isinstance(p, str) for p in indexed):
         return ['indexed: expected a list of strings']
@@ -318,42 +333,65 @@ def orphans(cfg, reference_text=''):
     router = cfg.get('routerFile', f'{wiki}/README.md')
     root_file = cfg.get('rootInstructions', 'AGENTS.md')
     routed = {s['path'].replace('\\', '/') for t in cfg['topics'].values() for s in t['sources']}
+    if root is not None:
+        try:
+            for field, value in [('wikiDir', wiki), ('historyDir', history)]:
+                configured_path(value, owner, field, allow_root=True)
+        except ValueError as error:
+            return [str(error)]
+        routed = {inventory_name(path, owner) for path in routed}
+        wiki, history, root_file = (inventory_name(path, owner) for path in (wiki, history, root_file))
     allowed = {p.replace('\\', '/'): reason for p, reason in cfg.get('unrouted', {}).items()}
     try:
-        router_text = section({'path': router})
+        router_text = section({'path': router}, root=root)
     except (ValueError, OSError):
         router_text = ''  # link_problems reports the invalid or unreadable router.
     reference_text += '\n' + router_text
+    if root is not None:
+        router = inventory_name(router, owner)
     bad = []
     skip = {'.git', 'node_modules', 'dist', 'build', 'vendor', '.venv', 'target'}
     prefixes = indexed_prefixes(indexed)
-    for d, dirs, files in os.walk(ROOT):
-        base = os.path.relpath(d, ROOT).replace(os.sep, '/')
+    def walk_error(error):
+        rel = os.path.relpath(error.filename or owner, owner).replace(os.sep, '/')
+        bad.append(f'{rel}: cannot scan directory: {error}')
+    for d, dirs, files in os.walk(owner, onerror=walk_error if root is not None else None):
+        base = os.path.relpath(d, owner).replace(os.sep, '/')
         dirs[:] = [x for x in dirs if x != '.git' and
+                   not excluded_path(os.path.join(d, x), excluded_roots) and
+                   (root is None or inside_root(os.path.join(d, x), owner, allow_root=True)) and
                    ((x not in skip and not x.startswith('.')) or
                     may_hold_indexed(child_dir(base, x), prefixes)) and
                    not skipped_dir(child_dir(base, x), skip_dirs, wiki, traversing=True)]
         if base != '.' and skipped_dir(base, skip_dirs, wiki):
             continue
         for f in files:
-            rel = os.path.relpath(os.path.join(d, f), ROOT).replace(os.sep, '/')
+            path = os.path.join(d, f)
+            if excluded_path(path, excluded_roots):
+                continue
+            rel = os.path.relpath(path, owner).replace(os.sep, '/')
             if not f.endswith('.md'):
                 continue
+            identity = rel if root is None else inventory_name(path, owner)
             reasons = [reason for pattern, reason in allowed.items()
                        if rel == pattern or fnmatch.fnmatchcase(rel, pattern)]
             if (any(fnmatch.fnmatch(rel, pattern) for pattern in indexed)
-                    and rel not in routed and rel not in reference_text
+                    and identity not in routed and rel not in reference_text
                     and not any(isinstance(reason, str) and reason.strip() for reason in reasons)):
                 bad.append(f'{rel}: indexed page not named (name it in a topic page, route it, or list it under "unrouted" with a reason)')
             if (reasons or any(x in skip or x.startswith('.') for x in rel.split('/')[:-1])):
                 continue
-            if rel.startswith(history + '/'):
-                if os.path.relpath(rel, wiki).replace(os.sep, '/') not in router_text and rel not in router_text:
+            if root is not None and identity in (root_file, router):
+                continue
+            if identity.startswith(history + '/') or (root is not None and history == '.'):
+                if (os.path.relpath(identity, wiki).replace(os.sep, '/') not in router_text
+                        and rel not in router_text and identity not in router_text):
                     bad.append(f'{rel}: history file not indexed in {router}')
-            elif rel.startswith(wiki + '/'):
-                if rel != router and rel not in routed:
+            elif identity.startswith(wiki + '/') or (root is not None and wiki == '.'):
+                if (identity != router and identity not in routed
+                        and (root is None or identity != root_file)):
                     bad.append(f'{rel}: wiki page no topic loads (map it, or list it under "unrouted" with a reason)')
-            elif f == 'AGENTS.md' and rel != root_file and rel not in routed:
+            elif f == 'AGENTS.md' and identity != root_file and identity not in routed:
                 bad.append(f'{rel}: scoped instructions no topic loads')
     return bad
 
@@ -869,19 +907,33 @@ def reference_label(text, start, end):
     return None
 
 
-def link_problems(cfg):
+def link_problems(cfg, root=None, excluded_roots=()):
     """Check links in routed sources, wiki pages, and indexed pages."""
+    owner = ROOT if root is None else root
     paths = {s['path'].replace('\\', '/') for t in cfg['topics'].values() for s in t['sources']}
-    sources = {os.path.abspath(os.path.join(ROOT, p)) for p in paths}
+    sources = {os.path.abspath(os.path.join(owner, p)) for p in paths}
     wiki = cfg.get('wikiDir', 'wiki')
-    router = os.path.abspath(os.path.join(ROOT, cfg.get('routerFile', f'{wiki}/README.md')))
+    router = os.path.abspath(os.path.join(owner, cfg.get('routerFile', f'{wiki}/README.md').replace('\\', '/')))
     paths.add(router)
+    bad, indexed_paths = [], set()
     indexed = cfg.get('indexed', [])
     if isinstance(indexed, list) and indexed and all(isinstance(pattern, str) for pattern in indexed):
         prefixes, skip_dirs = indexed_prefixes(indexed), skip_patterns(cfg) or []
-        for directory, dirs, files in os.walk(ROOT):
-            base = os.path.relpath(directory, ROOT).replace(os.sep, '/')
+        def walk_error(error):
+            rel = os.path.relpath(error.filename or owner, owner).replace(os.sep, '/')
+            bad.append(f'{rel}: cannot scan indexed directory: {error}')
+        for directory, dirs, files in os.walk(owner, onerror=walk_error if root is not None else None):
+            base = os.path.relpath(directory, owner).replace(os.sep, '/')
+            if root is not None:
+                for name in dirs:
+                    rel = child_dir(base, name)
+                    if (name.endswith('.md') and any(fnmatch.fnmatch(rel, pattern) for pattern in indexed)
+                            and not excluded_path(os.path.join(directory, name), excluded_roots)
+                            and not skipped_dir(rel, skip_dirs, wiki)):
+                        bad.append(f'{rel}: indexed page is not a file inside repo')
             dirs[:] = [name for name in dirs if name != '.git' and
+                       not excluded_path(os.path.join(directory, name), excluded_roots) and
+                       (root is None or inside_root(os.path.join(directory, name), owner, allow_root=True)) and
                        may_hold_indexed(child_dir(base, name), prefixes) and
                        not skipped_dir(child_dir(base, name), skip_dirs, wiki, traversing=True)]
             if base != '.' and skipped_dir(base, skip_dirs, wiki):
@@ -889,39 +941,50 @@ def link_problems(cfg):
             for name in files:
                 if not name.endswith('.md'):
                     continue
-                rel = os.path.relpath(os.path.join(directory, name), ROOT).replace(os.sep, '/')
+                path = os.path.join(directory, name)
+                if excluded_path(path, excluded_roots):
+                    continue
+                rel = os.path.relpath(path, owner).replace(os.sep, '/')
                 if any(fnmatch.fnmatch(rel, pattern) for pattern in indexed):
                     paths.add(rel)
-    paths = {os.path.abspath(os.path.join(ROOT, p)) for p in paths}
-    wiki_paths, bad = set(), []
-    pending = [(os.path.join(ROOT, wiki), frozenset())]
+                    indexed_paths.add(os.path.abspath(path))
+    paths = {os.path.abspath(os.path.join(owner, p)) for p in paths}
+    wiki_paths = set()
+    pending = [(os.path.join(owner, wiki.replace('\\', '/')), frozenset())]
     while pending:
         directory, ancestors = pending.pop()
+        if excluded_path(directory, excluded_roots):
+            continue
         canonical = os.path.realpath(directory)
-        if not (canonical == ROOT or canonical.startswith(os.path.join(ROOT, ''))):
-            bad.append(f'{os.path.relpath(directory, ROOT).replace(os.sep, "/")}: wiki directory is outside repo')
+        if not inside_root(directory, owner, allow_root=True):
+            bad.append(f'{os.path.relpath(directory, owner).replace(os.sep, "/")}: wiki directory is outside repo')
             continue
         if canonical in ancestors:
             continue
         try:
             with os.scandir(directory) as entries:
                 for entry in entries:
+                    if excluded_path(entry.path, excluded_roots):
+                        continue
                     if entry.is_dir():
                         pending.append((entry.path, ancestors | {canonical}))
                     elif entry.name.endswith('.md'):
                         wiki_paths.add(os.path.abspath(entry.path))
         except OSError as error:
-            bad.append(f'{os.path.relpath(directory, ROOT).replace(os.sep, "/")}: cannot scan wiki directory: {error}')
+            bad.append(f'{os.path.relpath(directory, owner).replace(os.sep, "/")}: cannot scan wiki directory: {error}')
     for path in sorted(paths | wiki_paths):
-        rel = os.path.relpath(path, ROOT).replace(os.sep, '/')
-        canonical = os.path.realpath(path)
-        if not canonical.startswith(os.path.join(ROOT, '')) or not os.path.isfile(path):
+        rel = os.path.relpath(path, owner).replace(os.sep, '/')
+        if not inside_root(path, owner) or not os.path.isfile(path):
             if path == router:
                 bad.append(f'{rel}: router is not a file inside repo')
             elif path in wiki_paths and path not in sources:
                 bad.append(f'{rel}: wiki page is not a file inside repo')
+            elif root is not None and path in indexed_paths:
+                bad.append(f'{rel}: indexed page is not a file inside repo')
             continue  # Rendering retains ownership of invalid configured sources.
         try:
+            if not inside_root(path, owner):
+                raise ValueError('outside repo')
             with open(path, encoding='utf-8') as source:
                 lines = source.read().split('\n')
         except (ValueError, OSError) as error:
@@ -938,40 +1001,55 @@ def link_problems(cfg):
                 target = os.path.realpath(os.path.normpath(os.path.join(os.path.dirname(path), dest)))
             except (OSError, ValueError):
                 target = ''
-            if not target.startswith(os.path.join(ROOT, '')) or not os.path.isfile(target):
+            if not inside_root(target, owner) or not os.path.isfile(target):
                 bad.append(f'{rel}:{line}: relative link {raw!r} is not a file inside repo')
     return bad
 
 
-def check(cfg):
-    bad = link_problems(cfg)
+def check(cfg, root=None, excluded_roots=(), namespace='', summary=True):
+    owner = ROOT if root is None else root
+    bad = link_problems(cfg, root=root, excluded_roots=excluded_roots)
     budgets = cfg.get('budgets', {})
     root_file = cfg.get('rootInstructions', 'AGENTS.md')
-    root_text = open(os.path.join(ROOT, root_file), encoding='utf-8').read()
+    root_text = ''
+    try:
+        path = (os.path.join(owner, root_file) if root is None else
+                configured_path(root_file, owner, 'rootInstructions'))
+        if root is not None and not stat.S_ISREG(os.stat(path).st_mode):
+            raise ValueError('expected a regular file')
+        if root is not None:
+            configured_path(path, owner, 'rootInstructions')
+        # Read the kernel without section stripping; its own whitespace and
+        # UTF-8 bytes belong to its budget, not the caller's displayed markers.
+        with open(path, encoding='utf-8') as kernel:
+            root_text = kernel.read()
+        root_size = len(root_text.encode('utf-8'))
+        root_cap = budgets.get('rootInstructionsMaxBytes', 8192)
+        print(f'{namespace + root_file:18} {root_size:6} B  (cap {root_cap})')
+        if root_size > root_cap:
+            bad.append(f'{root_file} {root_size} B > {root_cap}')
+    except (ValueError, OSError) as error:
+        bad.append(f'{root_file}: {error}')
     reference_text = [root_text]
-    root_size = len(root_text.encode())
-    root_cap = budgets.get('rootInstructionsMaxBytes', 8192)
-    print(f'{root_file:18} {root_size:6} B  (cap {root_cap})')
-    if root_size > root_cap:
-        bad.append(f'{root_file} {root_size} B > {root_cap}')
     for name, t in cfg['topics'].items():
         if f'`{name}`' not in root_text:
             bad.append(f'{name}: not listed in {root_file} (agents will not know it exists)')
         try:
-            rendered = render(cfg, name)
+            rendered = render(cfg, name, root=root)
             size = len(rendered.encode())
         except (ValueError, OSError) as e:
             bad.append(f'{name}: {e}')
             continue
         reference_text.append(rendered)
         cap = t.get('maxBytes', budgets.get('defaultTopicMaxBytes', 16384))
-        print(f'{name:18} {size:6} B  (cap {cap})')
+        print(f'{namespace + name:18} {size:6} B  (cap {cap})')
         if size > cap:
             bad.append(f'{name}: {size} B > {cap} (split the topic; do not raise the cap)')
-    bad = orphans(cfg, '\n'.join(reference_text)) + bad
+    bad = orphans(cfg, '\n'.join(reference_text), root=root, excluded_roots=excluded_roots) + bad
     for b in bad:
-        print('FAIL', b)
-    print('ok' if not bad else f'{len(bad)} problem(s)')
+        print(f'FAIL mount {diagnostic(namespace[:-1])}: {diagnostic(b)}' if namespace else f'FAIL {b}')
+    if summary:
+        print('ok' if not bad else f'{len(bad)} problem(s)')
     return 1 if bad else 0
 
 
@@ -1009,7 +1087,20 @@ def main(argv):
                 print(f'{entry.name + "/" + name:18} {topic["description"]} [{origin}]')
         return int(failed)
     if args == ['check']:
-        return check(cfg)
+        if not entries:
+            return check(cfg)
+        excluded = [entry.root for entry in entries if entry.root is not None]
+        failed = check(cfg, excluded_roots=excluded, summary=False)
+        for entry in entries:
+            try:
+                mounted = load_mount(entry)
+            except (OSError, ValueError) as error:
+                print(f'FAIL mount {diagnostic(entry.name)}: {diagnostic(error)}')
+                failed += 1
+                continue
+            failed += check(mounted, root=entry.root, namespace=entry.name + '/', summary=False)
+        print(f'{failed} root(s) failed' if failed else 'ok')
+        return int(bool(failed))
     loaded, selected = {}, []
     for requested in args:
         prefix, separator, topic = requested.partition('/')

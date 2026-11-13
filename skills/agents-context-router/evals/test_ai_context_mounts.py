@@ -543,5 +543,549 @@ class MountBoundaryTests(MountFixture):
         self.assertEqual(opened, [])
 
 
+class MountCheckTests(MountFixture):
+    def checked(self, failures=0):
+        result = self.cli('check')
+        self.assertEqual((result.returncode, result.stderr), (int(bool(failures)), ''),
+                         result.stdout + result.stderr)
+        summary = 'ok' if not failures else f'{failures} root(s) failed'
+        self.assertEqual(result.stdout.splitlines()[-1], summary)
+        self.assertEqual(result.stdout.splitlines().count(summary), 1)
+        self.assertNotIn('problem(s)', result.stdout)
+        return result.stdout
+
+    def fresh(self):
+        # Each mutation gets a new synthetic parent, and every parent is
+        # registered for cleanup by the existing fixture, even on assertion.
+        MountFixture.setUp(self)
+
+    def test_review55_invalid_mounts_fail_check(self):
+        # Review32099: a clean local root must not certify an invalid mount.
+        for declaration, config, reason in [
+                ({'root': '../outside'}, None, 'root'),
+                ({'root': 'modules/kb-core', 'typo': True}, None, 'typo'),
+                ({'root': 'modules/kb-core'}, '{', 'JSON'),
+                ({'root': 'modules/kb-core'}, '{"topics": []}', 'topics'),
+                ({'root': 'modules/kb-core'}, '{"topics": {}, "mounts": {"bad": {}}}', 'nested')]:
+            with self.subTest(declaration=declaration, reason=reason):
+                self.fresh()
+                self.cfg['unrouted'] = {'modules/*': 'Independent module data'}
+                self.cfg['mounts']['kb'] = declaration
+                self.sibling()
+                if config is not None:
+                    self.write('modules/kb-core/wiki/ai-context.json', config)
+                out = self.checked(1)
+                self.assertIn('FAIL mount kb:', out)
+                self.assertIn(reason, out)
+                self.assertIn(f'{"other/guide":18} ', out)
+                self.assertNotIn('NOTICE', out)
+
+    def test_independent_discovery(self):
+        out = self.checked()
+        self.assertIn(f'{"guide":18} ', out)
+        self.assertIn(f'{"kb/guide":18} ', out)
+        self.assertIn(f'{"kb/AGENTS.md":18} ', out)
+        self.write('AGENTS.md', '`guide`\n`kb/guide`\n')
+        self.write('modules/kb-core/AGENTS.md', 'No topic discovery.\n')
+        self.assertIn('FAIL mount kb: guide: not listed in AGENTS.md', self.checked(1))
+        self.write('AGENTS.md', 'No topic discovery.\n')
+        self.write('modules/kb-core/AGENTS.md', '`guide`\n')
+        out = self.checked(1)
+        self.assertIn('FAIL guide: not listed in AGENTS.md', out)
+        self.assertNotIn('FAIL mount kb: guide: not listed', out)
+        self.write('AGENTS.md', '`guide`\n')
+        self.inner_cfg['rootInstructions'] = 'KERNEL.md'
+        self.write('modules/kb-core/KERNEL.md', '`guide`\n')
+        self.inner_cfg['unrouted'] = {'AGENTS.md': 'Use KERNEL.md'}
+        self.save_configs()
+        self.assertIn(f'{"kb/KERNEL.md":18} ', self.checked())
+
+    def test_budget_ownership(self):
+        native = '<!-- wiki/guide.md -->\n# Guide\nModule.'
+        self.assertEqual(len(native.encode('utf-8')), 38)
+        raw_kernel = '`guide`\n  \t\n知識\n'
+        root_bytes = len(raw_kernel.encode('utf-8'))
+        self.write('modules/kb-core/AGENTS.md', raw_kernel)
+        self.cfg['budgets'] = {'rootInstructionsMaxBytes': 10000, 'defaultTopicMaxBytes': 10000}
+        self.sibling()
+        self.inner_cfg['budgets'] = {'rootInstructionsMaxBytes': root_bytes, 'defaultTopicMaxBytes': 38}
+        self.save_configs()
+        self.assertIn(f'{"kb/guide":18} {38:6} B  (cap 38)', self.checked())
+        direct = self.cli('check', root=self.module_root, config=self.module_root / 'wiki/ai-context.json')
+        self.assertEqual((direct.returncode, direct.stderr), (0, ''))
+        self.assertIn(f'{"guide":18} {38:6} B  (cap 38)', direct.stdout)
+        self.inner_cfg['budgets']['defaultTopicMaxBytes'] = 37
+        self.save_configs()
+        self.assertIn('FAIL mount kb: guide: 38 B > 37', self.checked(1))
+        self.inner_cfg['topics']['guide']['maxBytes'] = 38
+        self.save_configs()
+        self.checked()
+        self.inner_cfg['budgets']['rootInstructionsMaxBytes'] = root_bytes - 1
+        self.save_configs()
+        self.assertIn(f'FAIL mount kb: AGENTS.md {root_bytes} B > {root_bytes - 1}', self.checked(1))
+        self.inner_cfg['budgets']['rootInstructionsMaxBytes'] = root_bytes
+        long_root = self.root / 'modules/a-very-long-consumer-directory/knowledge/core'
+        long_root.parent.mkdir(parents=True)
+        self.module_root.rename(long_root)
+        self.module_root = long_root
+        self.cfg['mounts']['kb']['root'] = str(long_root)
+        self.save_configs()
+        self.assertIn(f'{"kb/guide":18} {38:6} B  (cap 38)', self.checked())
+        absolute = str(self.module_root / 'wiki/guide.md')
+        self.inner_cfg['topics']['guide']['sources'][0]['path'] = absolute
+        absolute_bytes = len(('<!-- ' + absolute + ' -->\n# Guide\nModule.').encode('utf-8'))
+        self.inner_cfg['topics']['guide']['maxBytes'] = absolute_bytes
+        self.save_configs()
+        self.assertIn(f'{"kb/guide":18} {absolute_bytes:6} B', self.checked())
+        self.inner_cfg['topics']['guide']['maxBytes'] -= 1
+        self.save_configs()
+        self.assertIn(f'{absolute_bytes} B > {absolute_bytes - 1}', self.checked(1))
+        self.inner_cfg['topics']['guide']['sources'][0]['path'] = 'wiki/guide.md'
+        self.inner_cfg['topics']['guide']['maxBytes'] = 38
+        self.write(str(long_root / 'wiki/guide.md'), '# Guide\n模組。\n')
+        multibyte = len('<!-- wiki/guide.md -->\n# Guide\n模組。'.encode('utf-8'))
+        self.inner_cfg['topics']['guide']['maxBytes'] = multibyte
+        self.save_configs()
+        self.checked()
+        self.inner_cfg['topics']['guide']['maxBytes'] -= 1
+        self.save_configs()
+        self.assertIn(f'{multibyte} B > {multibyte - 1}', self.checked(1))
+
+    def test_failed_roots_continue(self):
+        for kind, reason in [('missing', 'missing root'), ('outside', 'root'),
+                             ('declaration', 'declaration'), ('config-missing', 'config'),
+                             ('config-directory', 'config'),
+                             ('config-json', 'JSON'), ('nested', 'nested'),
+                             ('kernel-missing', 'AGENTS.md'), ('kernel-utf8', 'AGENTS.md')]:
+            with self.subTest(kind=kind):
+                self.fresh()
+                self.sibling()
+                if kind == 'missing':
+                    self.cfg['mounts']['kb']['root'] = 'modules/absent'
+                    self.cfg['unrouted'] = {'modules/kb-core/*': 'Unmounted data'}
+                elif kind == 'outside':
+                    self.cfg['mounts']['kb']['root'] = '../outside'
+                    self.cfg['unrouted'] = {'modules/kb-core/*': 'Unmounted data'}
+                elif kind == 'declaration':
+                    self.cfg['mounts']['kb'] = None
+                    self.cfg['unrouted'] = {'modules/kb-core/*': 'Unmounted data'}
+                elif kind == 'nested':
+                    self.inner_cfg['mounts'] = {'never-follow': {'root': '../'}}
+                self.save_configs()
+                if kind == 'config-missing':
+                    (self.module_root / 'wiki/ai-context.json').unlink()
+                elif kind == 'config-directory':
+                    (self.module_root / 'wiki/ai-context.json').unlink()
+                    (self.module_root / 'wiki/ai-context.json').mkdir()
+                elif kind == 'config-json':
+                    self.write('modules/kb-core/wiki/ai-context.json', '{')
+                elif kind == 'kernel-missing':
+                    (self.module_root / 'AGENTS.md').unlink()
+                elif kind == 'kernel-utf8':
+                    (self.module_root / 'AGENTS.md').write_bytes(b'\xff')
+                out = self.checked(1)
+                self.assertIn('FAIL mount kb:', out)
+                self.assertIn(reason, out)
+                self.assertIn(f'{"other/guide":18} ', out)
+        self.fresh()
+        self.sibling()
+        self.write('AGENTS.md', 'No discovery.\n')
+        self.write('modules/kb-core/AGENTS.md', 'No discovery.\n')
+        self.write('wiki/extra.md', '# Orphan\n')
+        out = self.checked(2)
+        self.assertIn('FAIL guide: not listed', out)
+        self.assertIn('FAIL mount kb: guide: not listed', out)
+        self.assertIn(f'{"other/guide":18} ', out)
+
+    def test_each_inner_rule(self):
+        cases = [('wiki/extra.md', '# Extra\n', 'wiki page no topic loads'),
+                 ('wiki/history/log.md', '# History\n', 'history file not indexed'),
+                 ('pkg/AGENTS.md', 'Scoped.\n', 'scoped instructions no topic loads'),
+                 ('docs/runbook.md', '# Runbook\n', 'indexed page not named'),
+                 ('wiki/guide.md', '# Renamed\n', 'found 0x'),
+                 ('wiki/guide.md', '# Guide\nOne\n# Guide\nTwo\n', 'found 2x'),
+                 ('wiki/guide.md', '# Guide\nSelected\n# Else\n[Bad](missing.md)\n', 'relative link'),
+                 ('wiki/extra.md', '[Bad](missing.md)\n', 'relative link'),
+                 ('wiki/history/log.md', '[Bad](missing.md)\n', 'relative link'),
+                 ('wiki/README.md', '[Bad](missing.md)\n', 'relative link')]
+        for path, text, reason in cases:
+            with self.subTest(path=path, reason=reason):
+                self.fresh()
+                self.sibling()
+                self.write('modules/kb-core/' + path, text)
+                # Outer exceptions and references cannot satisfy an inner rule.
+                self.cfg['unrouted'] = {'*': 'Outer-only exception'}
+                self.cfg['skipDirs'] = ['modules']
+                self.write('AGENTS.md', '`guide`\n' + path + '\n')
+                if path == 'docs/runbook.md':
+                    self.inner_cfg['indexed'] = ['docs/*.md']
+                if path == 'wiki/guide.md':
+                    self.inner_cfg['topics']['guide']['sources'][0]['heading'] = 'Guide'
+                if reason == 'relative link' and path == 'wiki/extra.md':
+                    self.inner_cfg['unrouted'] = {'wiki/extra.md': 'Human reference'}
+                if reason == 'relative link' and path == 'wiki/history/log.md':
+                    self.write('modules/kb-core/wiki/README.md', 'history/log.md\n')
+                self.save_configs()
+                out = self.checked(1)
+                self.assertIn('FAIL mount kb:', out)
+                self.assertIn(reason, out)
+                self.assertIn(f'{"other/guide":18} ', out)
+        self.fresh()
+        self.write('modules/kb-core/wiki/extra.md', '# Human reference\n')
+        self.write('modules/kb-core/generated/AGENTS.md', 'Generated.\n')
+        self.inner_cfg['unrouted'] = {'wiki/extra.md': 'Human reference'}
+        self.inner_cfg['skipDirs'] = ['generated']
+        self.save_configs()
+        self.checked()
+        self.inner_cfg.update(wikiDir='context', historyDir='logs', routerFile='context/index.md',
+                              indexed=['docs/*.md'])
+        self.write('modules/kb-core/context/index.md', 'logs/log.md\ndocs/runbook.md\n')
+        self.write('modules/kb-core/logs/log.md', '# History\n')
+        self.write('modules/kb-core/docs/runbook.md', '# Runbook\n')
+        self.save_configs()
+        self.checked()
+        self.fresh()
+        self.symlink(self.module_root / 'wiki/again', self.module_root / 'wiki', directory=True)
+        self.checked()
+
+    def test_inventory_ownership_and_aliases(self):
+        for location in ['modules/kb-core', 'wiki/kb-core']:
+            with self.subTest(location=location):
+                self.fresh()
+                target = self.root / location
+                if target != self.module_root:
+                    self.module_root.rename(target)
+                    self.module_root = target
+                self.cfg['mounts']['kb']['root'] = location
+                self.cfg['mounts']['same'] = {'root': location}
+                self.cfg['indexed'] = ['**/*.md']
+                self.write('AGENTS.md', '`guide`\nAGENTS.md wiki/README.md\n')
+                self.symlink(self.root / 'wiki/module-alias', target, directory=True)
+                self.symlink(self.root / 'wiki/page-alias.md', target / 'wiki/guide.md')
+                self.save_configs()
+                out = self.checked()
+                self.assertIn(f'{"same/guide":18} ', out)
+                # Observe the outer walkers alone. Mounted checks legitimately
+                # read the same subtree later with their independent rules.
+                real_open, real_scan = open, os.scandir
+                forbidden = []
+                def owned(path):
+                    physical = os.path.realpath(path)
+                    return physical == str(target) or physical.startswith(str(target) + os.sep)
+                def guarded_open(path, *args, **kwargs):
+                    if owned(path):
+                        forbidden.append(str(path))
+                        raise AssertionError('outer automatic inventory read owned file')
+                    return real_open(path, *args, **kwargs)
+                def guarded_scan(path):
+                    if owned(path):
+                        forbidden.append(str(path))
+                        raise AssertionError('outer automatic inventory scanned owned tree')
+                    return real_scan(path)
+                with patch.object(router, 'ROOT', str(self.root)), \
+                        patch('builtins.open', side_effect=guarded_open), \
+                        patch.object(router.os, 'scandir', side_effect=guarded_scan):
+                    self.assertEqual(router.orphans(self.cfg, 'AGENTS.md wiki/README.md',
+                                                   excluded_roots=[str(target)]), [])
+                    self.assertEqual(router.link_problems(self.cfg, excluded_roots=[str(target)]), [])
+                self.assertEqual(forbidden, [])
+                neighbor = self.write(location + '-neighbor/wiki/extra.md', '# Unmounted\n')
+                out = self.checked(1)
+                self.assertIn(str(neighbor.relative_to(self.root)).replace(os.sep, '/'), out)
+                neighbor.unlink()
+                # An invalid config retains safe-root ownership; neither a
+                # parent skip nor its exception can hide that mount failure.
+                self.cfg['skipDirs'] = ['modules', 'wiki']
+                self.cfg['unrouted'] = {'*': 'Outer rule only'}
+                self.save_configs()
+                (target / 'wiki/ai-context.json').unlink()
+                out = self.checked(2)
+                self.assertIn('FAIL mount kb: config', out)
+                self.assertIn('FAIL mount same: config', out)
+                self.assertNotIn('wiki page no topic loads', out)
+                self.assertNotIn('indexed page not named', out)
+                self.assertNotIn('scoped instructions no topic loads', out)
+        self.fresh()
+        # Physical overlap is permitted without recursive declarations. The
+        # wider owner explicitly exempts its independently checked subroot.
+        for path, text in [('AGENTS.md', '`guide`\n'), ('wiki/README.md', '# Router\n'),
+                           ('wiki/guide.md', '# Guide\nPart.\n'),
+                           ('wiki/ai-context.json', json.dumps(self.config('Part guide')))]:
+            self.write('modules/kb-core/part/' + path, text)
+        self.cfg['mounts']['part'] = {'root': 'modules/kb-core/part'}
+        self.inner_cfg['unrouted'] = {'part/*': 'Separate independent owner'}
+        self.save_configs()
+        self.assertIn(f'{"part/guide":18} ', self.checked())
+
+    def test_explicit_outer_sources_are_checked(self):
+        inner_source = {'path': 'modules/kb-core/wiki/guide.md', 'heading': 'Guide'}
+        self.cfg['topics']['guide']['sources'].append(inner_source)
+        self.cfg['skipDirs'] = ['modules']
+        self.write('modules/kb-core/wiki/guide.md', '# Guide\nSelected.\n# Other\n[Bad](missing.md)\n')
+        self.save_configs()
+        out = self.checked(2)
+        self.assertIn('FAIL modules/kb-core/wiki/guide.md:4: relative link', out)
+        self.assertIn('FAIL mount kb: wiki/guide.md:4: relative link', out)
+        self.write('modules/kb-core/wiki/guide.md', '# Guide\nModule.\n')
+        inner_source['heading'] = 'Missing'
+        self.save_configs()
+        self.assertIn("FAIL guide: modules/kb-core/wiki/guide.md: heading 'Missing' found 0x", self.checked(1))
+        inner_source['heading'] = 'Guide'
+        self.cfg['topics']['guide']['maxBytes'] = 1
+        self.save_configs()
+        self.assertIn('FAIL guide:', self.checked(1))
+        self.cfg['topics']['guide'].pop('maxBytes')
+        self.cfg['topics']['guide']['sources'].pop()
+        self.cfg['routerFile'] = 'modules/kb-core/wiki/README.md'
+        self.cfg['unrouted'] = {'wiki/README.md': 'Using module router explicitly'}
+        self.write('modules/kb-core/wiki/README.md', '[Bad](missing.md)\n')
+        self.save_configs()
+        self.assertIn('FAIL modules/kb-core/wiki/README.md:1: relative link', self.checked(2))
+        self.fresh()
+        self.write('wiki/guide.md', '# Guide\n[Module](../modules/kb-core/wiki/guide.md)\n')
+        self.checked()
+        self.write('modules/kb-core/wiki/guide.md', '# Guide\n[Project](../../../wiki/guide.md)\n')
+        self.assertIn('FAIL mount kb: wiki/guide.md:2: relative link', self.checked(1))
+
+    def test_absolute_and_alias_ownership(self):
+        self.inner_cfg.update(rootInstructions=str(self.module_root / 'AGENTS.md'),
+                              wikiDir=str(self.module_root / 'wiki'),
+                              historyDir=str(self.module_root / 'wiki/history'),
+                              routerFile=str(self.module_root / 'wiki/README.md'), indexed=['docs/*.md'])
+        self.inner_cfg['topics']['guide']['sources'] = [
+            {'path': str(self.module_root / 'wiki/guide.md'), 'heading': 'Guide'}]
+        self.write('modules/kb-core/wiki/README.md', 'history/log.md\ndocs/runbook.md\n')
+        self.write('modules/kb-core/wiki/history/log.md', '# History\n')
+        self.write('modules/kb-core/docs/runbook.md', '# Runbook\n')
+        self.save_configs()
+        self.checked()
+        self.symlink(self.module_root / 'wiki/alias.md', self.module_root / 'wiki/guide.md')
+        self.inner_cfg['topics']['guide']['sources'][0]['path'] = 'wiki/alias.md'
+        self.save_configs()
+        self.checked()
+        self.symlink(self.module_root / 'KERNEL.md', self.module_root / 'AGENTS.md')
+        self.symlink(self.module_root / 'router-alias.md', self.module_root / 'wiki/README.md')
+        self.inner_cfg['rootInstructions'] = 'KERNEL.md'
+        self.inner_cfg['routerFile'] = 'router-alias.md'
+        self.save_configs()
+        self.checked()
+        self.symlink(self.module_root / 'wiki-alias', self.module_root / 'wiki', directory=True)
+        self.inner_cfg['wikiDir'] = 'wiki-alias'
+        self.save_configs()
+        self.checked()
+        # Each lexical alias has its own link base despite one physical file.
+        self.fresh()
+        self.write('modules/kb-core/docs/page.md', '[Neighbor](neighbor.md)\n')
+        self.write('modules/kb-core/docs/neighbor.md', '# Neighbor\n')
+        self.symlink(self.module_root / 'wiki/alias.md', self.module_root / 'docs/page.md')
+        self.inner_cfg['topics']['guide']['sources'] = [
+            {'path': 'wiki/guide.md'}, {'path': 'wiki/alias.md'}, {'path': 'docs/page.md'}]
+        for reverse in [False, True]:
+            if reverse:
+                self.inner_cfg['topics']['guide']['sources'].reverse()
+            self.save_configs()
+            out = self.checked(1)
+            self.assertEqual(out.count('FAIL mount kb: wiki/alias.md:1: relative link'), 1)
+            self.assertNotIn('FAIL mount kb: docs/page.md:1: relative link', out)
+
+    def test_mounted_reads_stay_inside(self):
+        for kind in ['instructions-relative', 'instructions-absolute', 'instructions-alias',
+                     'source-relative', 'source-absolute', 'source-alias', 'source-directory',
+                     'router-relative', 'router-alias', 'wiki-alias', 'indexed-alias',
+                     'link-relative', 'link-encoded']:
+            with self.subTest(kind=kind):
+                self.fresh()
+                inside_outer = not kind.endswith('alias')
+                outside = self.write('outer-only/secret.md' if inside_outer else
+                                     str(self.parent / 'outside/secret.md'), '# Outside inner owner\n')
+                relative = '../../outer-only/secret.md'
+                detail = 'secret.md'
+                if kind.startswith('instructions'):
+                    self.inner_cfg['rootInstructions'] = relative
+                    if kind.endswith('absolute'):
+                        self.inner_cfg['rootInstructions'] = str(outside)
+                    elif kind.endswith('alias'):
+                        self.symlink(self.module_root / 'kernel.md', outside)
+                        self.inner_cfg['rootInstructions'] = 'kernel.md'
+                        detail = 'kernel.md'
+                elif kind.startswith('source'):
+                    source = self.inner_cfg['topics']['guide']['sources'][0]
+                    source['path'] = relative
+                    if kind.endswith('absolute'):
+                        source['path'] = str(outside)
+                    elif kind.endswith('alias'):
+                        self.symlink(self.module_root / 'wiki/escape.md', outside)
+                        source['path'] = 'wiki/escape.md'
+                        detail = 'escape.md'
+                    elif kind.endswith('directory'):
+                        source['path'] = 'wiki'
+                        detail = 'wiki'
+                elif kind.startswith('router'):
+                    self.inner_cfg['routerFile'] = relative
+                    if kind.endswith('alias'):
+                        self.symlink(self.module_root / 'wiki/router.md', outside)
+                        self.inner_cfg['routerFile'] = 'wiki/router.md'
+                        detail = 'router.md'
+                elif kind == 'wiki-alias':
+                    self.symlink(self.module_root / 'wiki/escape', outside.parent, directory=True)
+                    detail = 'wiki/escape'
+                elif kind == 'indexed-alias':
+                    self.symlink(self.module_root / 'docs/escape.md', outside)
+                    self.inner_cfg['indexed'] = ['docs/*.md']
+                    self.write('modules/kb-core/AGENTS.md', '`guide`\ndocs/escape.md\n')
+                    detail = 'docs/escape.md'
+                else:
+                    destination = '../../../outer-only/secret.md'
+                    if kind == 'link-encoded':
+                        destination = '%2e%2e/%2e%2e/%2e%2e/outer-only/secret.md'
+                    self.write('modules/kb-core/wiki/guide.md', '# Guide\n[Outside](' + destination + ')\n')
+                self.save_configs()
+                real_open, real_scan = open, os.scandir
+                forbidden = []
+                def guarded_open(path, *args, **kwargs):
+                    if os.path.realpath(path) == str(outside):
+                        forbidden.append(str(path))
+                        raise AssertionError('external content opened')
+                    return real_open(path, *args, **kwargs)
+                def guarded_scan(path):
+                    # For file escapes into the outer project, its automatic
+                    # walk may legitimately scan outer-only. Alias scan cases
+                    # target a sibling outside BOTH roots, still in this temp.
+                    if not inside_outer and os.path.realpath(path) == str(outside.parent):
+                        forbidden.append(str(path))
+                        raise AssertionError('external directory scanned')
+                    return real_scan(path)
+                with patch('builtins.open', side_effect=guarded_open), \
+                        patch.object(router.os, 'scandir', side_effect=guarded_scan):
+                    code, out, err = self.call_main('check')
+                self.assertEqual((code, err), (1, ''), out + err)
+                self.assertIn('FAIL mount kb:', out)
+                self.assertIn(detail, out)
+                self.assertEqual(forbidden, [])
+        self.fresh()
+        self.write('modules/kb-core/wiki/guide.md', '# Guide\n'
+                   '[External](https://example.invalid) [Absolute](/not/read) [Fragment](#guide)\n')
+        self.checked()
+
+    def test_directory_settings_and_regular_file_boundaries(self):
+        for field in ['wikiDir', 'historyDir', 'routerFile', 'rootInstructions']:
+            for spelling in ['relative', 'absolute', 'alias']:
+                with self.subTest(field=field, spelling=spelling):
+                    self.fresh()
+                    outside = self.write(str(self.parent / 'outside/secret.md'), '# Outside\n')
+                    target = outside.parent if field in ('wikiDir', 'historyDir') else outside
+                    if spelling == 'relative':
+                        value = os.path.relpath(target, self.module_root)
+                    elif spelling == 'absolute':
+                        value = str(target)
+                    else:
+                        alias = self.module_root / ('external' if target.is_dir() else 'external.md')
+                        self.symlink(alias, target, directory=target.is_dir())
+                        value = alias.name
+                    self.inner_cfg[field] = value
+                    self.save_configs()
+                    real_open, real_scan = open, os.scandir
+                    forbidden = []
+                    def guarded_open(path, *args, **kwargs):
+                        if os.path.realpath(path) == str(outside):
+                            forbidden.append(str(path))
+                            raise AssertionError('outside configured file read')
+                        return real_open(path, *args, **kwargs)
+                    def guarded_scan(path):
+                        if os.path.realpath(path) == str(outside.parent):
+                            forbidden.append(str(path))
+                            raise AssertionError('outside configured directory scanned')
+                        return real_scan(path)
+                    with patch('builtins.open', side_effect=guarded_open), \
+                            patch.object(router.os, 'scandir', side_effect=guarded_scan):
+                        code, out, err = self.call_main('check')
+                    self.assertEqual((code, err), (1, ''), out + err)
+                    self.assertIn('FAIL mount kb:', out)
+                    self.assertIn(field, out)
+                    self.assertIn(value, out)
+                    self.assertEqual(forbidden, [])
+        for field in ['rootInstructions', 'routerFile']:
+            with self.subTest(directory_file=field):
+                self.fresh()
+                self.inner_cfg[field] = 'wiki'
+                self.save_configs()
+                out = self.checked(1)
+                self.assertIn('FAIL mount kb:', out)
+                self.assertIn('wiki', out)
+        self.fresh()
+        # A referenced indexed-only dangling file must still fail file checks;
+        # the reference deliberately prevents the orphan rule masking it.
+        self.symlink(self.module_root / 'docs/broken.md', self.module_root / 'absent.md')
+        self.inner_cfg['indexed'] = ['docs/*.md']
+        self.write('modules/kb-core/AGENTS.md', '`guide`\ndocs/broken.md\n')
+        self.save_configs()
+        out = self.checked(1)
+        self.assertIn('FAIL mount kb: docs/broken.md', out)
+        self.assertNotIn('indexed page not named', out)
+
+    def test_explicit_checkers_keep_globals_and_references(self):
+        self.write('modules/kb-core/docs/runbook.md', '# Indexed\n')
+        self.inner_cfg['indexed'] = ['docs/*.md']
+        self.write('AGENTS.md', '`guide`\ndocs/runbook.md\n')
+        self.save_configs()
+        original = router.ROOT, router.CFG_PATH
+        for owner, cfg, expected in [(self.root, self.cfg, []),
+                                      (self.module_root, self.inner_cfg, ['docs/runbook.md']),
+                                      (self.root, self.cfg, [])]:
+            excluded = [str(self.module_root)] if owner == self.root else []
+            problems = router.orphans(cfg, root=str(owner), excluded_roots=excluded)
+            self.assertEqual([item.split(':', 1)[0] for item in problems], expected)
+            self.assertEqual(router.link_problems(cfg, root=str(owner), excluded_roots=excluded), [])
+            output = io.BytesIO()
+            stream = io.TextIOWrapper(output, encoding='utf-8')
+            try:
+                with patch.object(sys, 'stdout', stream):
+                    code = router.check(cfg, root=str(owner), excluded_roots=excluded)
+                stream.flush()
+                text = output.getvalue().decode('utf-8')
+            finally:
+                stream.close()
+            self.assertEqual(code, int(bool(expected)), text)
+            self.assertEqual((router.ROOT, router.CFG_PATH), original)
+        self.write('modules/kb-core/AGENTS.md', '`guide`\ndocs/runbook.md\n')
+        self.checked()
+
+    def test_owned_read_errors_continue(self):
+        for relative, operation in [('wiki/ai-context.json', 'read'), ('AGENTS.md', 'read'),
+                                    ('wiki/guide.md', 'read'),
+                                    ('wiki/README.md', 'read'), ('wiki', 'scan')]:
+            for fault in ['denied', 'utf8'] if operation == 'read' else ['denied']:
+                with self.subTest(relative=relative, fault=fault):
+                    self.fresh()
+                    self.sibling()
+                    target = self.module_root / relative
+                    real_open, real_scan = open, os.scandir
+                    if fault == 'utf8':
+                        target.write_bytes(b'\xff')
+                    def failing_open(path, *args, **kwargs):
+                        if fault == 'denied' and operation == 'read' and os.path.abspath(path) == str(target):
+                            raise PermissionError('synthetic denied read')
+                        return real_open(path, *args, **kwargs)
+                    def failing_scan(path):
+                        if operation == 'scan' and os.path.abspath(path) == str(target):
+                            raise PermissionError('synthetic denied scan')
+                        return real_scan(path)
+                    with patch('builtins.open', side_effect=failing_open), \
+                            patch.object(router.os, 'scandir', side_effect=failing_scan):
+                        code, out, err = self.call_main('check')
+                    self.assertEqual((code, err), (1, ''), out + err)
+                    self.assertIn('FAIL mount kb:', out)
+                    self.assertIn(relative, out)
+                    self.assertIn(f'{"other/guide":18} ', out)
+                    self.assertTrue(out.endswith('1 root(s) failed\n'), out)
+        self.fresh()
+        self.sibling()
+        (self.root / 'AGENTS.md').unlink()
+        out = self.checked(1)
+        self.assertIn('FAIL AGENTS.md', out)
+        self.assertIn(f'{"kb/guide":18} ', out)
+        self.assertIn(f'{"other/guide":18} ', out)
+
+
 if __name__ == '__main__':
     unittest.main()
