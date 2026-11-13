@@ -291,7 +291,7 @@ class CheckTests(unittest.TestCase):
                 (self.root / path).unlink()
 
     def test_render_errors_survive(self):
-        for text, heading, detail in [(None, None, 'No such file'),
+        for text, heading, detail in [(None, None, '[WinError 2]' if os.name == 'nt' else 'No such file'),
                                       ('# Guide\n', 'Absent', "heading 'Absent' found 0x"),
                                       ('# Guide\n# Guide\n', 'Guide', "heading 'Guide' found 2x")]:
             with self.subTest(detail=detail):
@@ -305,6 +305,9 @@ class CheckTests(unittest.TestCase):
                 output = self.check(1)
                 self.assertIn('FAIL guide:', output)
                 self.assertIn(detail, output)
+                if text is None:
+                    self.assertIn('guide.md', output)
+                    self.assertFalse((self.root / source['path']).exists())
                 self.assertIn('FAIL ' + PAGE, output)
 
     def test_existing_commands_and_fixture(self):

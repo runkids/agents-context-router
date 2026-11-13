@@ -1,6 +1,7 @@
 """Mounted roots: independent namespaces, guarded reads and atomic requests."""
 import copy
 from contextlib import nullcontext
+import errno
 import importlib.util
 import io
 import json
@@ -64,8 +65,8 @@ class MountFixture(unittest.TestCase):
         # Real main with reconfigurable streams; injected I/O faults cannot
         # cross a subprocess boundary. Preserve globals and parent streams.
         output, errors = io.BytesIO(), io.BytesIO()
-        stdout = io.TextIOWrapper(output, encoding='utf-8')
-        stderr = io.TextIOWrapper(errors, encoding='utf-8')
+        stdout = io.TextIOWrapper(output, encoding='utf-8', newline='\n')
+        stderr = io.TextIOWrapper(errors, encoding='utf-8', newline='\n')
         try:
             with patch.object(router, 'ROOT', str(self.root)), \
                     patch.object(router, 'CFG_PATH', str(self.root / 'wiki/ai-context.json')), \
@@ -220,9 +221,24 @@ class MountRoutingTests(MountFixture):
             self.cfg['mounts']['kb']['root'] = 'missing' + control + 'root'
             self.save_configs()
             result = self.cli('list')
-            self.assertEqual(result.returncode, 0)
-            self.assertEqual(len(result.stdout.splitlines()), 2)
-            self.assertIn('NOTICE mount kb: missing root ', result.stdout)
+            if os.name == 'nt' and control in ('\n', '\r'):
+                # Windows rejects these filenames before a missing-root stat.
+                self.assert_failure(result, 'mount kb:', 'root')
+                self.assertIn('\\x' + format(ord(control), '02x'), result.stderr)
+                self.assertEqual(len(result.stderr.splitlines()), 1)
+            else:
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(len(result.stdout.splitlines()), 2)
+                self.assertIn('NOTICE mount kb: missing root ', result.stdout)
+            # The notice-formatting contract also runs where the native FS
+            # cannot represent that name; only the load result is synthetic.
+            failure = router.MissingMount('missing root missing' + control + 'root')
+            with patch.object(router, 'load_mount', side_effect=failure) as loader:
+                code, out, err = self.call_main('list')
+            self.assertEqual(loader.call_count, 1)
+            self.assertEqual((code, err), (0, ''))
+            self.assertEqual(out.splitlines(), [f'{"guide":18} Project guide',
+                             'NOTICE mount kb: missing root missing\\x' + format(ord(control), '02x') + 'root'])
         self.cfg['mounts']['kb']['root'] = 'modules/kb-core'
         self.sibling()
         config_path = self.module_root / 'wiki/ai-context.json'
@@ -572,14 +588,14 @@ class MountBoundaryTests(MountFixture):
                 swapped, opened = [], []
                 def swapping_stat(path, *args, **kwargs):
                     info = real_stat(path, *args, **kwargs)
-                    if not swapped and os.path.abspath(path) == str(target):
+                    if not swapped and os.path.normcase(os.path.abspath(path)) == os.path.normcase(str(target)):
                         self.assertTrue(router.stat.S_ISREG(info.st_mode))
                         swapped.append(str(path))
                         target.unlink()
                         self.symlink(target, outside)
                     return info
                 def observed_open(path, *args, **kwargs):
-                    if os.path.realpath(path) == str(outside):
+                    if os.path.normcase(os.path.realpath(path)) == os.path.normcase(str(outside)):
                         opened.append(str(path))
                     return real_open(path, *args, **kwargs)
                 # Return the REAL regular-file stat, then swap its pathname.
@@ -603,9 +619,9 @@ class MountBoundaryTests(MountFixture):
                             output = out + err
                     except (ValueError, OSError) as error:
                         code, output = 1, str(error)
-                self.assertEqual(swapped, [str(target)])
+                self.assertEqual([os.path.normcase(path) for path in swapped], [os.path.normcase(str(target))])
                 self.assertTrue(target.is_symlink())
-                self.assertEqual(os.path.realpath(target), str(outside))
+                self.assertEqual(os.path.normcase(os.path.realpath(target)), os.path.normcase(str(outside)))
                 with self.subTest(oracle='no-outside-open'):
                     self.assertEqual(opened, [])
                 with self.subTest(oracle='rejected-before-read'):
@@ -1115,7 +1131,7 @@ class MountCheckTests(MountFixture):
                         code, out, err = self.call_main('check')
                     self.assertEqual((code, err), (1, ''), out + err)
                     self.assertIn('FAIL mount kb:', out)
-                    self.assertIn(relative, out)
+                    self.assertIn(relative, out.replace('\\', '/'))
                     self.assertIn(f'{"other/guide":18} ', out)
                     self.assertTrue(out.endswith('1 root(s) failed\n'), out)
                     self.assertIn(operation, reached)
@@ -1469,20 +1485,34 @@ class MountSurrogatePathTests(MountFixture):
                 config = 'wiki/ai-context.json'
                 if field == 'root':
                     moved = self.module_root.with_name(name)
-                    self.module_root.rename(moved)
-                    self.module_root = moved
                     self.cfg['mounts']['kb']['root'] = 'modules/' + name
                 elif field == 'config':
                     config = 'wiki/' + name + '.json'
                     self.cfg['mounts']['kb']['config'] = config
                 else:
                     source = 'wiki/' + name + '.md'
-                    (self.module_root / 'wiki/guide.md').rename(self.module_root / source)
                     self.inner_cfg['topics']['guide']['sources'][0]['path'] = source
-                self.save_path_configs(config)
-                selected_path = (self.module_root if field == 'root' else self.module_root /
+                selected_path = (moved if field == 'root' else self.module_root /
                                  (config if field == 'config' else source))
-                self.assertTrue(selected_path.exists())
+                try:
+                    if field == 'root':
+                        self.module_root.rename(moved)
+                        self.module_root = moved
+                    elif field == 'sources.path':
+                        (self.module_root / 'wiki/guide.md').rename(selected_path)
+                    self.save_path_configs(config)
+                except OSError as error:
+                    # Some POSIX filesystems (including hosted macOS) refuse
+                    # raw byte names. Still run every CLI safety/continuation
+                    # assertion with the identical escaped path declaration.
+                    self.assertEqual(error.errno, errno.EILSEQ)
+                    failed_paths = [os.fsdecode(path) for path in (error.filename, error.filename2)
+                                    if path is not None]
+                    self.assertIn(str(selected_path), failed_paths)
+                    self.save_path_configs()
+                else:
+                    # Linux must exercise actual existing non-UTF-8 names.
+                    self.assertTrue(selected_path.exists())
                 self.assertIn(b'bad\xff', os.fsencode(selected_path))
                 self.assert_invalid_path_continues(field)
 
@@ -1602,7 +1632,8 @@ class MountInventoryPolicyTests(MountFixture):
                 self.write('modules/kb-core/wiki/README.md', '# Router\n')
                 with self.subTest(stage='unindexed-negative'):
                     result = self.cli('check')
-                    self.assert_failure(result, 'FAIL mount kb: logs/log.md: history file not indexed in wiki/README.md')
+                    index = os.path.normcase('wiki/README.md').replace(os.sep, '/')
+                    self.assert_failure(result, 'FAIL mount kb: logs/log.md: history file not indexed in ' + index)
                     self.assertIn('other/guide', result.stdout)
                     self.assertTrue(result.stdout.endswith('1 root(s) failed\n'), result.stdout)
                 self.write('modules/kb-core/wiki/README.md',
