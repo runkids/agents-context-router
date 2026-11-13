@@ -26,7 +26,8 @@ the invocation cwd independently; relative paths inside the config resolve from 
 Empty or unset overrides use the defaults.
 No dependencies beyond the Python 3.8+ standard library.
 """
-import fnmatch, json, os, re, sys
+import fnmatch, json, os, re, stat, sys, unicodedata
+from collections import namedtuple
 from urllib.parse import unquote
 from html import unescape
 from html.entities import html5
@@ -70,11 +71,158 @@ DEFINITION_START = re.compile(r'^ {0,3}\[((?:\\.|[^\]\\])+)\]:')
 DEFINITION_END = re.compile(r'(?:(?=[ \t\n])[ \t]*(?:\n[ \t]*)?' + TITLE + r')?[ \t]*(?:\n|$)')
 
 
-def load_cfg():
-    if not os.path.exists(CFG_PATH):
+def load_cfg(path=None):
+    if path is None and not os.path.exists(CFG_PATH):
         sys.exit(f'missing {CFG_PATH}; copy this script to <repo>/scripts/ and create wiki/ai-context.json, or set AI_CONTEXT_ROOT and AI_CONTEXT_CONFIG for a shared installation')
-    with open(CFG_PATH, encoding='utf-8') as f:
+    with open(CFG_PATH if path is None else path, encoding='utf-8') as f:
         return json.load(f)
+
+
+def inside_root(path, root, allow_root=False):
+    """Compare physical path components, including anchors and drive boundaries."""
+    try:
+        path, root = (os.path.normcase(os.path.realpath(p)) for p in (path, root))
+        return os.path.commonpath([path, root]) == root and (allow_root or path != root)
+    except (OSError, ValueError):
+        return False
+
+
+def diagnostic(value):
+    """Keep a mounted diagnostic on one line without changing ordinary Unicode."""
+    return ''.join(f'\\x{ord(c):02x}' if unicodedata.category(c) == 'Cc' else c
+                   for c in str(value))
+
+
+def configured_path(value, root, field, allow_root=False):
+    if not isinstance(value, str) or not value or '\x00' in value:
+        raise ValueError(f'{field}: expected a nonempty path string without NUL')
+    path = os.path.abspath(os.path.join(root, value.replace('\\', '/')))
+    if not inside_root(path, root, allow_root=allow_root):
+        raise ValueError(f'{field} {value}: outside root {root}')
+    return path
+
+
+Mount = namedtuple('Mount', 'name root config_path error')
+
+
+class MissingMount(ValueError):
+    """Only a safely contained root that stat could not find is optional in list."""
+
+
+def valid_mount_name(name):
+    return (isinstance(name, str) and bool(name) and name not in ('.', '..')
+            and not any(c in '/\\' or c.isspace() or unicodedata.category(c) == 'Cc' for c in name))
+
+
+def mount_entries(cfg, root=None):
+    root = ROOT if root is None else root
+    declarations = cfg.get('mounts', {})
+    if not isinstance(declarations, dict):
+        raise ValueError('mounts: expected an object')
+    entries = []
+    for name, declaration in declarations.items():
+        mounted_root = config_path = error = None
+        # Resolve a safe root even if another declaration field is invalid:
+        # ownership of that subtree must not depend on a readable config.
+        try:
+            if isinstance(declaration, dict) and 'root' in declaration:
+                mounted_root = os.path.realpath(configured_path(declaration['root'], root, 'root'))
+            if not valid_mount_name(name):
+                raise ValueError('name: expected a nonempty single segment without whitespace or controls')
+            if not isinstance(declaration, dict):
+                raise ValueError('declaration: expected an object')
+            if 'root' not in declaration:
+                raise ValueError('root: required path')
+            unknown = set(declaration) - {'root', 'config'}
+            if unknown:
+                raise ValueError(f'declaration: unknown field {sorted(unknown)[0]}')
+            config_path = configured_path(declaration.get('config', 'wiki/ai-context.json'),
+                                          mounted_root, 'config')
+            if any(topic.startswith(name + '/') for topic in cfg['topics']):
+                raise ValueError(f'namespace collision: local topic reserves {name}/')
+        except (OSError, ValueError) as failure:
+            error = str(failure)
+        entries.append(Mount(name, mounted_root, config_path, error))
+    return entries
+
+
+def validate_mounted_cfg(cfg, root):
+    """Validate only shapes used by this router; leave legacy outer configs alone."""
+    if not isinstance(cfg, dict):
+        raise ValueError('config: expected an object')
+    topics = cfg.get('topics')
+    if not isinstance(topics, dict):
+        raise ValueError('topics: expected an object')
+    mounts = cfg.get('mounts', {})
+    if not isinstance(mounts, dict):
+        raise ValueError('mounts: expected an object')
+    if mounts:
+        raise ValueError('nested mounts are not supported')
+    budgets = cfg.get('budgets', {})
+    if not isinstance(budgets, dict):
+        raise ValueError('budgets: expected an object')
+    def cap(value, field):
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f'{field}: expected a nonnegative integer')
+    for field in ('rootInstructionsMaxBytes', 'defaultTopicMaxBytes'):
+        if field in budgets:
+            cap(budgets[field], 'budgets.' + field)
+    for field in ('rootInstructions', 'wikiDir', 'historyDir', 'routerFile'):
+        if field in cfg:
+            configured_path(cfg[field], root, field, allow_root=field in ('wikiDir', 'historyDir'))
+    for field in ('indexed', 'skipDirs'):
+        if field in cfg and (not isinstance(cfg[field], list)
+                             or any(not isinstance(item, str) for item in cfg[field])):
+            raise ValueError(f'{field}: expected a list of strings')
+    if not isinstance(cfg.get('unrouted', {}), dict):
+        raise ValueError('unrouted: expected an object')
+    for name, topic in topics.items():
+        field = f'topics.{name}'
+        if not isinstance(name, str) or not name:
+            raise ValueError('topics: expected nonempty topic names')
+        if not isinstance(topic, dict):
+            raise ValueError(f'{field}: expected an object')
+        if not isinstance(topic.get('description'), str):
+            raise ValueError(f'{field}.description: expected a string')
+        if 'maxBytes' in topic:
+            cap(topic['maxBytes'], field + '.maxBytes')
+        sources = topic.get('sources')
+        if not isinstance(sources, list):
+            raise ValueError(f'{field}.sources: expected a list')
+        for source in sources:
+            if not isinstance(source, dict):
+                raise ValueError(f'{field}.sources: expected source objects')
+            configured_path(source.get('path'), root, field + '.sources.path')
+            if 'heading' in source and not isinstance(source['heading'], str):
+                raise ValueError(f'{field}.sources.heading: expected a string')
+
+
+def load_mount(entry):
+    if entry.error:
+        raise ValueError(entry.error)
+    try:
+        info = os.stat(entry.root)
+    except FileNotFoundError:
+        raise MissingMount(f'missing root {entry.root}')
+    except OSError as error:
+        raise ValueError(f'root {entry.root}: {error}') from error
+    if not stat.S_ISDIR(info.st_mode):
+        raise ValueError(f'root {entry.root}: expected a directory')
+    try:
+        path = configured_path(entry.config_path, entry.root, 'config')
+        if not stat.S_ISREG(os.stat(path).st_mode):
+            raise ValueError(f'config {path}: expected a regular file')
+        # Keep the lexical config path so a changed alias is checked again.
+        configured_path(path, entry.root, 'config')
+        cfg = load_cfg(path)
+    except UnicodeError as error:
+        raise ValueError(f'config {entry.config_path}: invalid UTF-8: {error}') from error
+    except json.JSONDecodeError as error:
+        raise ValueError(f'config {entry.config_path}: invalid JSON: {error}') from error
+    except OSError as error:
+        raise ValueError(f'config {entry.config_path}: {error}') from error
+    validate_mounted_cfg(cfg, entry.root)
+    return cfg
 
 
 def headings(lines):
@@ -93,9 +241,10 @@ def headings(lines):
             yield i, len(h.group(1)), h.group(2)
 
 
-def section(src):
-    path = os.path.realpath(os.path.join(ROOT, src['path'].replace('\\', '/')))
-    if not path.startswith(os.path.join(ROOT, '')):
+def section(src, root=None):
+    root = ROOT if root is None else root
+    path = os.path.realpath(os.path.join(root, src['path'].replace('\\', '/')))
+    if not inside_root(path, root):
         raise ValueError(f'{src["path"]}: outside repo')
     with open(path, encoding='utf-8') as f:
         lines = f.read().split('\n')
@@ -110,11 +259,15 @@ def section(src):
     return '\n'.join(lines[start:end]).strip()
 
 
-def render(cfg, name):
+def render(cfg, name, root=None, display_root=None):
     out = []
     for s in cfg['topics'][name]['sources']:
-        where = s['path'] + (f' § {s["heading"]}' if 'heading' in s else '')
-        out.append(f'<!-- {where} -->\n{section(s)}')
+        where = s['path']
+        if display_root is not None:
+            where = os.path.relpath(os.path.join(ROOT if root is None else root,
+                                               where.replace('\\', '/')), display_root).replace(os.sep, '/')
+        where += f' § {s["heading"]}' if 'heading' in s else ''
+        out.append(f'<!-- {where} -->\n{section(s, root=root)}')
     return '\n\n'.join(out)
 
 
@@ -830,16 +983,60 @@ def main(argv):
         print(f'agents-context-router {VERSION}')
         return 0
     cfg = load_cfg()
+    try:
+        entries = mount_entries(cfg)
+    except ValueError as error:
+        print(f'FAIL {diagnostic(error)}', file=sys.stdout if args == ['check'] else sys.stderr)
+        return 1
+    namespaces = {entry.name: entry for entry in entries if valid_mount_name(entry.name)}
     if args == ['list']:
         for n, t in cfg['topics'].items():
-            print(f'{n:18} {t["description"]}')
-        return 0
+            if n.split('/', 1)[0] not in namespaces or '/' not in n:
+                print(f'{n:18} {t["description"]}')
+        failed = False
+        for entry in entries:
+            try:
+                mounted = load_mount(entry)
+            except MissingMount as error:
+                print(f'NOTICE mount {diagnostic(entry.name)}: {diagnostic(error)}')
+                continue
+            except (OSError, ValueError) as error:
+                print(f'FAIL mount {diagnostic(entry.name)}: {diagnostic(error)}', file=sys.stderr)
+                failed = True
+                continue
+            origin = os.path.relpath(entry.root, ROOT).replace(os.sep, '/')
+            for name, topic in mounted['topics'].items():
+                print(f'{entry.name + "/" + name:18} {topic["description"]} [{origin}]')
+        return int(failed)
     if args == ['check']:
         return check(cfg)
-    unknown = [a for a in args if a not in cfg['topics']]
-    if unknown:
-        sys.exit(f'unknown topic {unknown[0]!r}; rerun this script with list')
-    print('\n\n'.join(render(cfg, a) for a in args))
+    loaded, selected = {}, []
+    for requested in args:
+        prefix, separator, topic = requested.partition('/')
+        entry = namespaces.get(prefix) if separator else None
+        try:
+            if entry is not None:
+                if prefix not in loaded:
+                    loaded[prefix] = load_mount(entry)
+                owner_cfg, owner_root = loaded[prefix], entry.root
+            else:
+                owner_cfg, owner_root, topic = cfg, None, requested
+            if topic not in owner_cfg['topics']:
+                print(f'unknown topic {requested!r}; rerun this script with list', file=sys.stderr)
+                return 1
+            selected.append((requested, owner_cfg, topic, owner_root))
+        except (OSError, ValueError) as error:
+            print(f'{diagnostic(requested)}: {diagnostic(error)}', file=sys.stderr)
+            return 1
+    bodies = []
+    for requested, owner_cfg, topic, owner_root in selected:
+        try:
+            bodies.append(render(owner_cfg, topic, root=owner_root,
+                                 display_root=ROOT if owner_root is not None else None))
+        except (OSError, ValueError) as error:
+            print(f'{diagnostic(requested)}: {diagnostic(error)}', file=sys.stderr)
+            return 1
+    print('\n\n'.join(bodies))
     return 0
 
 
