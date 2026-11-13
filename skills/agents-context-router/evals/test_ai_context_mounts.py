@@ -1393,5 +1393,163 @@ class MountUnicodeInputTests(MountFixture):
                 self.assertIn('Other.', selected.stdout)
 
 
+class MountDotWikiTests(MountFixture):
+    def test_dot_wiki_skip_dirs_cannot_hide_orphans(self):
+        for spelling in ['.', './', 'absolute']:
+            with self.subTest(wikiDir=spelling):
+                MountFixture.setUp(self)
+                self.sibling()
+                self.inner_cfg.update(wikiDir=str(self.module_root) if spelling == 'absolute' else spelling,
+                                      routerFile='wiki/README.md', historyDir='wiki/history', skipDirs=['notes'])
+                self.save_configs()
+                clean = self.cli('check')
+                self.assertEqual((clean.returncode, clean.stderr), (0, ''), clean.stdout)
+                self.write('modules/kb-core/notes/extra.md', '# Extra\n')
+                with self.subTest(stage='orphan'):
+                    result = self.cli('check')
+                    self.assert_failure(result, 'FAIL mount kb: notes/extra.md: wiki page no topic loads')
+                    self.assertIn('other/guide', result.stdout)
+                    self.assertTrue(result.stdout.endswith('1 root(s) failed\n'), result.stdout)
+                self.inner_cfg['unrouted'] = {'notes/extra.md': 'Deliberate wiki exception'}
+                self.save_configs()
+                excepted = self.cli('check')
+                self.assertEqual((excepted.returncode, excepted.stderr), (0, ''), excepted.stdout)
+                self.inner_cfg.pop('unrouted')
+                self.inner_cfg['topics']['guide']['sources'].append({'path': 'notes/extra.md'})
+                self.save_configs()
+                routed = self.cli('check')
+                self.assertEqual((routed.returncode, routed.stderr), (0, ''), routed.stdout)
+
+    def test_dot_wiki_keeps_indexed_and_link_checks(self):
+        self.inner_cfg.update(wikiDir='.', routerFile='wiki/README.md', historyDir='wiki/history',
+                              skipDirs=['notes'], indexed=['notes/*.md'])
+        self.write('modules/kb-core/notes/extra.md', '# Extra\n[gone](missing.md)\n')
+        self.save_configs()
+        with self.subTest(stage='indexed-orphan-and-link'):
+            result = self.cli('check')
+            self.assert_failure(result, 'FAIL mount kb: notes/extra.md: indexed page not named',
+                                'FAIL mount kb: notes/extra.md: wiki page no topic loads',
+                                "FAIL mount kb: notes/extra.md:2: relative link 'missing.md'")
+        self.inner_cfg['topics']['guide']['sources'].append({'path': 'notes/extra.md'})
+        self.save_configs()
+        with self.subTest(stage='routed-link-still-fails'):
+            self.assert_failure(self.cli('check'), "FAIL mount kb: notes/extra.md:2: relative link 'missing.md'")
+        self.write('modules/kb-core/notes/missing.md', '# Target\n')
+        self.inner_cfg['topics']['guide']['sources'].append({'path': 'notes/missing.md'})
+        self.save_configs()
+        repaired = self.cli('check')
+        self.assertEqual((repaired.returncode, repaired.stderr), (0, ''), repaired.stdout)
+
+    def test_ordinary_skip_dirs_still_prune_outside_wiki(self):
+        self.inner_cfg.update(skipDirs=['notes'], indexed=['notes/*.md'])
+        for name in ['extra.md', 'AGENTS.md']:
+            self.write('modules/kb-core/notes/' + name, '# Copy\n[gone](missing.md)\n')
+        self.save_configs()
+        skipped = self.cli('check')
+        self.assertEqual((skipped.returncode, skipped.stderr), (0, ''), skipped.stdout)
+        self.inner_cfg['topics']['guide']['sources'].append({'path': 'notes/extra.md'})
+        self.save_configs()
+        self.assert_failure(self.cli('check'), "FAIL mount kb: notes/extra.md:2: relative link 'missing.md'")
+        self.inner_cfg['topics']['guide']['sources'].pop()
+        self.inner_cfg['skipDirs'] = []
+        self.save_configs()
+        self.assert_failure(self.cli('check'), 'FAIL mount kb: notes/extra.md: indexed page not named',
+                            'FAIL mount kb: notes/AGENTS.md: scoped instructions no topic loads',
+                            "FAIL mount kb: notes/extra.md:2: relative link 'missing.md'")
+
+
+class MountSurrogatePathTests(MountFixture):
+    def save_path_configs(self, config='wiki/ai-context.json'):
+        # JSON stays strict UTF-8; invalid scalars exist only as JSON escapes.
+        self.write('wiki/ai-context.json', json.dumps(self.cfg, ensure_ascii=True))
+        self.write(str(self.module_root / config), json.dumps(self.inner_cfg, ensure_ascii=True))
+
+    def assert_invalid_path_continues(self, field):
+        for args in [('list',), ('check',), ('guide', 'kb/guide'), ('kb/guide', 'guide')]:
+            with self.subTest(command=args):
+                result = self.cli(*args)
+                self.assert_failure(result, 'mount kb:' if args[0] in ('list', 'check') else 'kb/guide:', field)
+                self.assertNotIn('NOTICE', result.stdout)
+                if args[0] in ('list', 'check'):
+                    self.assertIn('other/guide', result.stdout)
+                    if args == ('list',):
+                        self.assertNotIn(f'{"kb/guide":18} ', result.stdout)
+                else:
+                    self.assertEqual(result.stdout, '')
+        healthy = self.cli('guide', 'other/guide')
+        self.assertEqual((healthy.returncode, healthy.stderr), (0, ''))
+        self.assertEqual(healthy.stdout, '<!-- wiki/guide.md -->\n# Guide\nLocal.\n\n'
+                         '<!-- modules/other/wiki/guide.md -->\n# Guide\nOther.\n')
+
+    def test_escaped_surrogate_paths_fail_safely_and_continue(self):
+        for field in ['root', 'config', 'sources.path']:
+            for scalar in ['\ud800', '\udcff']:
+                with self.subTest(field=field, scalar=ascii(scalar)):
+                    MountFixture.setUp(self)
+                    self.sibling()
+                    self.cfg['skipDirs'] = ['modules']
+                    if field == 'root':
+                        self.cfg['mounts']['kb']['root'] = 'modules/bad' + scalar
+                    elif field == 'config':
+                        self.cfg['mounts']['kb']['config'] = 'wiki/bad' + scalar + '.json'
+                    else:
+                        self.inner_cfg['topics']['guide']['sources'][0]['path'] = 'wiki/bad' + scalar + '.md'
+                    self.save_path_configs()
+                    self.assert_invalid_path_continues(field)
+
+    @unittest.skipUnless(os.name == 'posix', 'real non-UTF-8 filename requires POSIX')
+    def test_posix_non_utf8_paths_fail_without_partial_render(self):
+        for field in ['root', 'config', 'sources.path']:
+            with self.subTest(field=field):
+                MountFixture.setUp(self)
+                self.sibling()
+                self.cfg['skipDirs'] = ['modules']
+                name = os.fsdecode(b'bad\xff')
+                self.assertEqual(os.fsencode(name), b'bad\xff')
+                self.assertIn('\udcff', name)
+                config = 'wiki/ai-context.json'
+                if field == 'root':
+                    moved = self.module_root.with_name(name)
+                    self.module_root.rename(moved)
+                    self.module_root = moved
+                    self.cfg['mounts']['kb']['root'] = 'modules/' + name
+                elif field == 'config':
+                    config = 'wiki/' + name + '.json'
+                    self.cfg['mounts']['kb']['config'] = config
+                else:
+                    source = 'wiki/' + name + '.md'
+                    (self.module_root / 'wiki/guide.md').rename(self.module_root / source)
+                    self.inner_cfg['topics']['guide']['sources'][0]['path'] = source
+                self.save_path_configs(config)
+                selected_path = (self.module_root if field == 'root' else self.module_root /
+                                 (config if field == 'config' else source))
+                self.assertTrue(selected_path.exists())
+                self.assertIn(b'bad\xff', os.fsencode(selected_path))
+                self.assert_invalid_path_continues(field)
+
+    def test_unicode_paths_and_escaped_pairs_remain_valid(self):
+        self.sibling()
+        moved = self.module_root.with_name('知識🚀')
+        self.module_root.rename(moved)
+        self.module_root = moved
+        config, source = 'wiki/設定🧭.json', 'wiki/指南🌍.md'
+        (moved / 'wiki/guide.md').rename(moved / source)
+        self.cfg['mounts']['kb'] = {'root': 'modules/知識🚀', 'config': config}
+        self.inner_cfg['topics']['guide']['sources'][0]['path'] = source
+        for escaped in [True, False]:
+            with self.subTest(escaped_json=escaped):
+                self.write('wiki/ai-context.json', json.dumps(self.cfg, ensure_ascii=escaped))
+                self.write(str(moved / config), json.dumps(self.inner_cfg, ensure_ascii=escaped))
+                listed = self.cli('list')
+                self.assertEqual((listed.returncode, listed.stderr), (0, ''))
+                self.assertIn(f'{"kb/guide":18} Module guide [modules/知識🚀]', listed.stdout)
+                checked = self.cli('check')
+                self.assertEqual((checked.returncode, checked.stderr), (0, ''), checked.stdout)
+                selected = self.cli('kb/guide', 'other/guide')
+                self.assertEqual((selected.returncode, selected.stderr), (0, ''))
+                self.assertEqual(selected.stdout, '<!-- modules/知識🚀/wiki/指南🌍.md -->\n# Guide\nModule.\n\n'
+                                 '<!-- modules/other/wiki/guide.md -->\n# Guide\nOther.\n')
+
+
 if __name__ == '__main__':
     unittest.main()

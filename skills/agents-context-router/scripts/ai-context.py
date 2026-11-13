@@ -106,6 +106,8 @@ def diagnostic(value):
 def configured_path(value, root, field, allow_root=False):
     if not isinstance(value, str) or not value or '\x00' in value:
         raise ValueError(f'{field}: expected a nonempty path string without NUL')
+    if any(unicodedata.category(c) == 'Cs' for c in value):
+        raise ValueError(f'{field}: path must not contain surrogates')
     path = os.path.abspath(os.path.join(root, value.replace('\\', '/')))
     if not inside_root(path, root, allow_root=allow_root):
         raise ValueError(f'{field} {value}: outside root {root}')
@@ -225,8 +227,6 @@ def load_mount(entry):
         path = configured_path(entry.config_path, entry.root, 'config')
         if not stat.S_ISREG(os.stat(path).st_mode):
             raise ValueError(f'config {path}: expected a regular file')
-        # Keep the lexical config path so a changed alias is checked again.
-        configured_path(path, entry.root, 'config')
         cfg = load_cfg(path)
     except UnicodeError as error:
         raise ValueError(f'config {entry.config_path}: invalid UTF-8: {error}') from error
@@ -261,8 +261,6 @@ def section(src, root=None):
         raise ValueError(f'{src["path"]}: outside repo')
     if not stat.S_ISREG(os.stat(path).st_mode):
         raise ValueError(f'{src["path"]}: expected a regular file')
-    if not inside_root(path, root):
-        raise ValueError(f'{src["path"]}: outside repo')
     with open(path, encoding='utf-8') as f:
         lines = f.read().split('\n')
     if 'heading' not in src:
@@ -309,7 +307,7 @@ def skip_patterns(cfg):
 
 def skipped_dir(rel, patterns, wiki, traversing=False):
     """Whether a directory is skipped; traversal may retain the path to the wiki."""
-    if (rel == wiki or rel.startswith(wiki + '/')
+    if (wiki == '.' or rel == wiki or rel.startswith(wiki + '/')
             or (traversing and wiki.startswith(rel + '/'))):
         return False
     parts = rel.split('/')
@@ -994,8 +992,6 @@ def link_problems(cfg, root=None, excluded_roots=()):
                 bad.append(f'{rel}: indexed page is not a file inside repo')
             continue  # Rendering retains ownership of invalid configured sources.
         try:
-            if not inside_root(path, owner):
-                raise ValueError('outside repo')
             with open(path, encoding='utf-8') as source:
                 lines = source.read().split('\n')
         except (ValueError, OSError) as error:
@@ -1028,8 +1024,6 @@ def check(cfg, root=None, excluded_roots=(), namespace='', summary=True):
                 configured_path(root_file, owner, 'rootInstructions'))
         if root is not None and not stat.S_ISREG(os.stat(path).st_mode):
             raise ValueError('expected a regular file')
-        if root is not None:
-            configured_path(path, owner, 'rootInstructions')
         # Read the kernel without section stripping; its own whitespace and
         # UTF-8 bytes belong to its budget, not the caller's displayed markers.
         with open(path, encoding='utf-8') as kernel:
