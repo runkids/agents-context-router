@@ -1170,7 +1170,10 @@ class MountAliasTests(MountFixture):
         cases = [('wiki/extra.md', 'docs/unlisted.md', '', 'wiki page no topic loads'),
                  ('wiki/history/alias.md', 'wiki/guide.md', '', 'history file not indexed'),
                  ('wiki/extra.md', 'wiki/history/log.md', 'history/log.md\n',
-                  'wiki page no topic loads')]
+                  'wiki page no topic loads'),
+                 ('wiki/extra.md', 'wiki/README.md', '', 'wiki page no topic loads'),
+                 ('wiki/extra.md', 'AGENTS.md', '', 'wiki page no topic loads'),
+                 ('scoped/AGENTS.md', 'AGENTS.md', '', 'scoped instructions no topic loads')]
         for alias_name, target_name, index, reason in cases:
             with self.subTest(mounted=mounted, alias=alias_name, target=target_name):
                 target = owner / target_name
@@ -1183,6 +1186,11 @@ class MountAliasTests(MountFixture):
                     self.write(str(owner / 'wiki/README.md'), '# Router\n' + index)
                     self.write(str(owner / 'wiki/ai-context.json'), json.dumps(cfg))
                     self.checked_alias(1, prefix + alias_name + ': ' + reason)
+                    if target_name in ('wiki/README.md', 'AGENTS.md'):
+                        cfg.setdefault('unrouted', {})[alias_name] = 'Deliberate lexical alias'
+                        self.write(str(owner / 'wiki/ai-context.json'), json.dumps(cfg))
+                        self.checked_alias(0)
+                        cfg['unrouted'].pop(alias_name)
                     if reason == 'history file not indexed':
                         self.write(str(owner / 'wiki/README.md'), '# Router\nhistory/alias.md\n')
                     else:
@@ -1191,10 +1199,47 @@ class MountAliasTests(MountFixture):
                     self.checked_alias(0)
                 finally:
                     cfg['topics']['guide']['sources'] = [{'path': 'wiki/guide.md'}]
+                    cfg.get('unrouted', {}).pop(alias_name, None)
                     alias.unlink()
                     if created:
                         target.unlink()
                     self.write(str(owner / 'wiki/README.md'), '# Router\n')
+                    self.write(str(owner / 'wiki/ai-context.json'), json.dumps(cfg))
+
+    def configured_alias_membership(self, owner, cfg, mounted):
+        prefix = 'FAIL mount kb: ' if mounted else 'FAIL '
+        cases = [('routerFile', 'wiki/router.md', 'docs/router.md', '# Router\n',
+                  'wiki/README.md', '# Router\n', 'wiki/extra.md', 'wiki page no topic loads'),
+                 ('rootInstructions', 'scoped/AGENTS.md', 'kernel.md', '`guide`\n',
+                  'AGENTS.md', '`guide`\n', 'other/AGENTS.md', 'scoped instructions no topic loads')]
+        for field, selected, target_name, text, default, default_text, extra, reason in cases:
+            with self.subTest(mounted=mounted, configured=field, selected=selected):
+                target = self.write(str(owner / target_name), text)
+                alias, unrelated = owner / selected, owner / extra
+                self.symlink(alias, target)
+                (owner / default).unlink()
+                cfg[field] = selected
+                try:
+                    self.write(str(owner / 'wiki/ai-context.json'), json.dumps(cfg))
+                    self.checked_alias(0)
+                    self.symlink(unrelated, target)
+                    self.checked_alias(1, prefix + extra + ': ' + reason)
+                    cfg.setdefault('unrouted', {})[extra] = 'Deliberate lexical alias'
+                    self.write(str(owner / 'wiki/ai-context.json'), json.dumps(cfg))
+                    self.checked_alias(0)
+                    cfg['unrouted'].pop(extra)
+                    cfg['topics']['guide']['sources'].append({'path': extra})
+                    self.write(str(owner / 'wiki/ai-context.json'), json.dumps(cfg))
+                    self.checked_alias(0)
+                finally:
+                    cfg.pop(field)
+                    cfg.get('unrouted', {}).pop(extra, None)
+                    cfg['topics']['guide']['sources'] = [{'path': 'wiki/guide.md'}]
+                    if unrelated.is_symlink():
+                        unrelated.unlink()
+                    alias.unlink()
+                    target.unlink()
+                    self.write(str(owner / default), default_text)
                     self.write(str(owner / 'wiki/ai-context.json'), json.dumps(cfg))
 
     def test_outer_alias_membership(self):
@@ -1202,9 +1247,11 @@ class MountAliasTests(MountFixture):
         self.cfg.pop('mounts')
         shutil.rmtree(self.root / 'modules')
         self.alias_membership(self.root, self.cfg, mounted=False)
+        self.configured_alias_membership(self.root, self.cfg, mounted=False)
 
     def test_mounted_alias_membership(self):
         self.alias_membership(self.module_root, self.inner_cfg, mounted=True)
+        self.configured_alias_membership(self.module_root, self.inner_cfg, mounted=True)
 
     def test_mounted_routed_aliases_keep_physical_matching(self):
         target = self.write('modules/kb-core/docs/routed.md', '# Routed\n')

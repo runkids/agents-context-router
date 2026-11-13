@@ -339,6 +339,12 @@ def orphans(cfg, reference_text='', root=None, excluded_roots=()):
                 configured_path(value, owner, field, allow_root=True)
         except ValueError as error:
             return [str(error)]
+        exemptions = {inventory_name(path, owner) for path in (root_file, router)}
+        for path in (root_file, router):
+            path = os.path.join(owner, path.replace('\\', '/'))
+            # Resolve parent aliases but retain the configured file's own name.
+            path = os.path.join(os.path.realpath(os.path.dirname(path)), os.path.basename(path))
+            exemptions.add(os.path.normcase(os.path.relpath(path, os.path.realpath(owner))).replace(os.sep, '/'))
         routed = {inventory_name(path, owner) for path in routed}
         wiki, history, root_file = (inventory_name(path, owner) for path in (wiki, history, root_file))
     allowed = {p.replace('\\', '/'): reason for p, reason in cfg.get('unrouted', {}).items()}
@@ -373,6 +379,7 @@ def orphans(cfg, reference_text='', root=None, excluded_roots=()):
             if not f.endswith('.md'):
                 continue
             identity = rel if root is None else inventory_name(path, owner)
+            scanned = rel if root is None else os.path.normcase(rel).replace(os.sep, '/')
             reasons = [reason for pattern, reason in allowed.items()
                        if rel == pattern or fnmatch.fnmatchcase(rel, pattern)]
             if (any(fnmatch.fnmatch(rel, pattern) for pattern in indexed)
@@ -381,18 +388,18 @@ def orphans(cfg, reference_text='', root=None, excluded_roots=()):
                 bad.append(f'{rel}: indexed page not named (name it in a topic page, route it, or list it under "unrouted" with a reason)')
             if (reasons or any(x in skip or x.startswith('.') for x in rel.split('/')[:-1])):
                 continue
-            if root is not None and identity in (root_file, router):
+            # Membership and exemptions follow the scanned path, not its target.
+            if root is not None and scanned in exemptions:
                 continue
-            # Membership follows the scanned path, not a file alias's target.
             if rel.startswith(history + '/') or (root is not None and history == '.'):
                 if (os.path.relpath(rel, wiki).replace(os.sep, '/') not in router_text
                         and rel not in router_text):
                     bad.append(f'{rel}: history file not indexed in {router}')
             elif rel.startswith(wiki + '/') or (root is not None and wiki == '.'):
-                if (identity != router and identity not in routed
-                        and (root is None or identity != root_file)):
+                if (scanned != router and identity not in routed
+                        and (root is None or scanned != root_file)):
                     bad.append(f'{rel}: wiki page no topic loads (map it, or list it under "unrouted" with a reason)')
-            elif f == 'AGENTS.md' and identity != root_file and identity not in routed:
+            elif f == 'AGENTS.md' and scanned != root_file and identity not in routed:
                 bad.append(f'{rel}: scoped instructions no topic loads')
     return bad
 
