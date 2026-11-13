@@ -547,6 +547,74 @@ class MountBoundaryTests(MountFixture):
                 router.load_mount(entry)
         self.assertEqual(opened, [])
 
+    def test_post_stat_containment_rechecks(self):
+        cases = [('section', False), ('section', True), ('config', True),
+                 ('links', False), ('links', True), ('kernel', True)]
+        for operation, mounted in cases:
+            with self.subTest(operation=operation, mounted=mounted):
+                MountFixture.setUp(self)
+                owner = self.module_root if mounted else self.root
+                cfg = self.inner_cfg if mounted else self.cfg
+                relative = {'section': 'wiki/guide.md', 'config': 'wiki/ai-context.json',
+                            'links': 'wiki/README.md', 'kernel': 'AGENTS.md'}[operation]
+                target = owner / relative
+                token = 'OUTSIDE-POST-STAT-SENTINEL'
+                text = '`guide`\n' + token + '\n'
+                if operation == 'config':
+                    outside_cfg = copy.deepcopy(self.inner_cfg)
+                    outside_cfg['topics']['guide']['description'] = token
+                    text = json.dumps(outside_cfg)
+                outside = self.write(str(self.parent / 'outside/sentinel.txt'), text)
+                entry = router.mount_entries(self.cfg, root=str(self.root))[0]
+                if operation == 'kernel':
+                    self.sibling()
+                real_stat, real_open = os.stat, open
+                swapped, opened = [], []
+                def swapping_stat(path, *args, **kwargs):
+                    info = real_stat(path, *args, **kwargs)
+                    if not swapped and os.path.abspath(path) == str(target):
+                        self.assertTrue(router.stat.S_ISREG(info.st_mode))
+                        swapped.append(str(path))
+                        target.unlink()
+                        self.symlink(target, outside)
+                    return info
+                def observed_open(path, *args, **kwargs):
+                    if os.path.realpath(path) == str(outside):
+                        opened.append(str(path))
+                    return real_open(path, *args, **kwargs)
+                # Return the REAL regular-file stat, then swap its pathname.
+                # Only the synthetic sibling sentinel can be exposed on RED.
+                with patch.object(router, 'ROOT', str(self.root)), \
+                        patch.object(router.os, 'stat', side_effect=swapping_stat), \
+                        patch('builtins.open', side_effect=observed_open):
+                    try:
+                        if operation == 'section':
+                            output = router.section({'path': relative},
+                                                    root=str(owner) if mounted else None)
+                            code = 0
+                        elif operation == 'config':
+                            output = json.dumps(router.load_mount(entry))
+                            code = 0
+                        elif operation == 'links':
+                            errors = router.link_problems(cfg, root=str(owner) if mounted else None)
+                            code, output = int(bool(errors)), '\n'.join(errors)
+                        else:
+                            code, out, err = self.call_main('check')
+                            output = out + err
+                    except (ValueError, OSError) as error:
+                        code, output = 1, str(error)
+                self.assertEqual(swapped, [str(target)])
+                self.assertTrue(target.is_symlink())
+                self.assertEqual(os.path.realpath(target), str(outside))
+                with self.subTest(oracle='no-outside-open'):
+                    self.assertEqual(opened, [])
+                with self.subTest(oracle='rejected-before-read'):
+                    self.assertEqual(code, 1, output)
+                    self.assertIn('outside', output)
+                    self.assertNotIn(token, output)
+                    if operation == 'kernel':
+                        self.assertIn('other/guide', output)
+
 
 class MountCheckTests(MountFixture):
     def checked(self, failures=0):

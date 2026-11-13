@@ -71,11 +71,11 @@ DEFINITION_START = re.compile(r'^ {0,3}\[((?:\\.|[^\]\\])+)\]:')
 DEFINITION_END = re.compile(r'(?:(?=[ \t\n])[ \t]*(?:\n[ \t]*)?' + TITLE + r')?[ \t]*(?:\n|$)')
 
 
-def load_cfg(path=None):
+def load_cfg(path=None, root=None):
     if path is None and not os.path.exists(CFG_PATH):
         sys.exit(f'missing {CFG_PATH}; copy this script to <repo>/scripts/ and create wiki/ai-context.json, or set AI_CONTEXT_ROOT and AI_CONTEXT_CONFIG for a shared installation')
-    with open(CFG_PATH if path is None else path, encoding='utf-8') as f:
-        return json.load(f)
+    return json.loads(read_text(CFG_PATH if path is None else path, root,
+                                f'config {path}: outside root {root}'))
 
 
 def inside_root(path, root, allow_root=False):
@@ -85,6 +85,13 @@ def inside_root(path, root, allow_root=False):
         return os.path.commonpath([path, root]) == root and (allow_root or path != root)
     except (OSError, ValueError):
         return False
+
+
+def read_text(path, root=None, outside='outside repo'):
+    if root is not None and not inside_root(path, root):
+        raise ValueError(outside)
+    with open(path, encoding='utf-8') as document:
+        return document.read()
 
 
 def excluded_path(path, excluded_roots):
@@ -227,7 +234,7 @@ def load_mount(entry):
         path = configured_path(entry.config_path, entry.root, 'config')
         if not stat.S_ISREG(os.stat(path).st_mode):
             raise ValueError(f'config {path}: expected a regular file')
-        cfg = load_cfg(path)
+        cfg = load_cfg(path, root=entry.root)
     except UnicodeError as error:
         raise ValueError(f'config {entry.config_path}: invalid UTF-8: {error}') from error
     except json.JSONDecodeError as error:
@@ -261,8 +268,7 @@ def section(src, root=None):
         raise ValueError(f'{src["path"]}: outside repo')
     if not stat.S_ISREG(os.stat(path).st_mode):
         raise ValueError(f'{src["path"]}: expected a regular file')
-    with open(path, encoding='utf-8') as f:
-        lines = f.read().split('\n')
+    lines = read_text(path, root, f'{src["path"]}: outside repo').split('\n')
     if 'heading' not in src:
         return '\n'.join(lines).strip()
     hs = list(headings(lines))
@@ -1019,8 +1025,7 @@ def link_problems(cfg, root=None, excluded_roots=()):
                 bad.append(f'{rel}: indexed page is not a file inside repo')
             continue  # Rendering retains ownership of invalid configured sources.
         try:
-            with open(path, encoding='utf-8') as source:
-                lines = source.read().split('\n')
+            lines = read_text(path, owner).split('\n')
         except (ValueError, OSError) as error:
             bad.append(f'{rel}: {error}')
             continue
@@ -1053,8 +1058,7 @@ def check(cfg, root=None, excluded_roots=(), namespace='', summary=True):
             raise ValueError('expected a regular file')
         # Read the kernel without section stripping; its own whitespace and
         # UTF-8 bytes belong to its budget, not the caller's displayed markers.
-        with open(path, encoding='utf-8') as kernel:
-            root_text = kernel.read()
+        root_text = read_text(path, root, f'rootInstructions {path}: outside root {owner}')
         root_size = len(root_text.encode('utf-8'))
         root_cap = budgets.get('rootInstructionsMaxBytes', 8192)
         print(f'{namespace + root_file:18} {root_size:6} B  (cap {root_cap})')
