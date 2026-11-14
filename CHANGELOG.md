@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0](https://github.com/runkids/agents-context-router/compare/v0.3.0...v0.4.0) (2026-11-14)
+
+
+### Features
+
+* opt in to exact-source reuse across topics ([#18](https://github.com/runkids/agents-context-router/issues/18)) ([70a474a](https://github.com/runkids/agents-context-router/commit/70a474a0b18a3a36248dfa596b1dd7358d9b10f6))
+* opt in to frontmatter-aware heading selection ([#17](https://github.com/runkids/agents-context-router/issues/17)) ([45d66b2](https://github.com/runkids/agents-context-router/commit/45d66b2777b2f0fbd444da4502d9729c2253fbdf))
+
+
+### Bug Fixes
+
+* keep routed maintenance evidence-aware and scoped ([#16](https://github.com/runkids/agents-context-router/issues/16)) ([0974df6](https://github.com/runkids/agents-context-router/commit/0974df66c898432f6fec599935d46546ac8de4f1))
+
 ## [0.3.0](https://github.com/runkids/agents-context-router/compare/v0.2.1...v0.3.0) (2026-11-14)
 
 
