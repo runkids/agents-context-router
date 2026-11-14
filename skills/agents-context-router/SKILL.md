@@ -103,6 +103,8 @@ Some text changes buckets. A behaviour rule learned the hard way (for example "i
 
    `check` applies each root's own discovery, budgets, orphan/history/indexed/link rules and exceptions. Native topic bytes exclude longer mounted display prefixes; the unstripped kernel keeps its own cap. Outer automatic inventories exclude mounted physical trees and aliases, including when an inner config is invalid; explicit outer sources/router still get checked. A contained missing root is a path-bearing `list` notice/status 0 unless another error occurs, but fails `check` or a selected topic. Other mount/config errors fail while healthy list/check entries continue. Topic calls load only requested mounted configs and buffer every body before printing, so a late error leaves stdout empty. See the copied manual for the full contract; absent/empty mounts retain existing behavior. Compare local customizations before deliberately replacing an older copied router; updating this skill alone does not update that copy.
 
+For multi-topic loads with repeated sources, opt in with `python3 scripts/ai-context.py --dedupe <topic> <topic>`. It keeps the first exact owner/path/heading source and its marker, without merging overlapping sections or changing single-topic output and independent `check` budgets. All sources still validate before output; file/heading reuse lasts only for this invocation. See the copied manual for the precise contract.
+
 ### 4b. Make drift fail the build
 
 Wire `check` into whatever the repo already runs on every change. Use the one that exists; do not add new tooling:

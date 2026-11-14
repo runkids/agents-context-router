@@ -159,6 +159,8 @@ AI_CONTEXT_ROOT=/work/repo AI_CONTEXT_CONFIG=/work/settings/router.json \
 
 生成物や証跡のダンプなど、指示を含まない大きなツリーは `"skipDirs": ["projects/*/artifacts"]`（デフォルト `[]`）で `check` の走査対象から外せます。各要素はリポジトリ相対のディレクトリの完全一致パス、または大文字と小文字を区別する fnmatch の glob で、`"unrouted"` のキーと同じように照合されます（`*` は `/` をまたぎます）。一致したディレクトリには `check` が入らないため、トピックのソースや明示したルーター索引でない限り、その中のページは孤立、indexed、リンクの検査対象になりません。各所有ルートの wiki は走査されますが、マウントのツリーは外側の走査から除外され、独自に検査されます。
 
+`python3 scripts/ai-context.py --dedupe <topic> <topic>`: [opt-in exact-source reuse and its limits](README.md#combining-topics-without-repeating-exact-sources). Default and single-topic output, source markers, and independent `check` budgets are unchanged.
+
 ## 既存のルーターツリー
 
 プロジェクト内にある独立したルーターを利用するには、選択中の外側の設定に次のフィールドを追加します。

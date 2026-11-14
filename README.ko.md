@@ -159,6 +159,8 @@ AI_CONTEXT_ROOT=/work/repo AI_CONTEXT_CONFIG=/work/settings/router.json \
 
 생성된 출력물이나 증거 덤프처럼 지침이 없는 큰 트리는 `"skipDirs": ["projects/*/artifacts"]`(기본값 `[]`)로 `check`의 탐색에서 제외할 수 있습니다. 각 항목은 저장소 기준 디렉터리의 정확한 경로이거나 대소문자를 구분하는 fnmatch glob이며, `"unrouted"` 키와 같은 방식으로 일치시킵니다(`*`는 `/`를 넘어 일치합니다). `check`는 일치하는 디렉터리에 들어가지 않으므로, topic 소스나 명시한 router 색인이 아닌 한 그 안의 페이지는 고아, indexed, 링크 검사를 받지 않습니다. 각 소유 루트의 wiki는 탐색하지만 마운트 트리는 바깥쪽 탐색에서 제외하고 독립적으로 검사합니다.
 
+`python3 scripts/ai-context.py --dedupe <topic> <topic>`: [opt-in exact-source reuse and its limits](README.md#combining-topics-without-repeating-exact-sources). Default and single-topic output, source markers, and independent `check` budgets are unchanged.
+
 ## 기존 router 트리
 
 프로젝트 안에 이미 있는 독립 router를 사용하려면 선택한 바깥쪽 설정에 다음 필드를 추가하세요.
