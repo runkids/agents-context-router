@@ -161,6 +161,8 @@ AI_CONTEXT_ROOT=/work/repo AI_CONTEXT_CONFIG=/work/settings/router.json \
 
 对于不含指令的大型目录树，例如生成的输出或证据转储，可用 `"skipDirs": ["projects/*/artifacts"]`（默认 `[]`）让 `check` 不再遍历它们。每项是相对仓库的目录精确路径或区分大小写的 fnmatch glob，匹配方式与 `"unrouted"` 的键相同（`*` 可跨越 `/`）。`check` 不会进入匹配的目录，因此除非页面列为 topic 的来源或选作 router 索引，这些页面不会参与孤立页面、indexed 和链接检查。每个根目录的 wiki 都会被遍历，但挂载目录树从外层扫描中排除，并接受独立检查。
 
+一次加载多个 topic 时，可用 `python3 scripts/ai-context.py --dedupe <topic> <topic>` 让完全相同的来源只输出一次，保留首次出现的位置与来源标注。默认输出、单个 topic 的输出，以及 `check` 对每个 topic 的独立上限都不变。细节与限制见[英文说明](README.md#combining-topics-without-repeating-exact-sources)。
+
 ## 已有的 router 目录树
 
 要使用项目内已经存在的独立 router，请在选中的外层配置中添加此字段：

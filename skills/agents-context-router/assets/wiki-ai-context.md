@@ -129,6 +129,10 @@ Optional `"skipDirs"` (a list of strings, default `[]`) keeps `check` out of bul
 
 `check` runs in CI to catch structural drift. Passing does not establish factual accuracy, policy compliance, freshness or complete task coverage; the targeted review above is still needed.
 
+## Combining topics
+
+`python3 scripts/ai-context.py --dedupe a b` prints each identical source entry (same root, path, heading and options) once, under its first topic. Every source is still validated; single-topic output and `check` budgets are unchanged. A local topic named `--dedupe` takes precedence.
+
 ## Skills
 
 Skills are workflow adapters. They may call `ai-context.py`, run checks and shorten steps, but no rule may live only in a skill. With no skill installed, this page and the kernel must still be enough.

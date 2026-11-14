@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Print only the doc sections a task needs.
 
-usage: ai-context.py list | <topic> [<topic>...] | check | --version
+usage: ai-context.py list | [--dedupe] <topic> [<topic>...] | check | --version
 
 Topics live in wiki/ai-context.json. A source is a whole file or one exact
 heading (the section runs to the next heading of the same or higher level).
@@ -420,15 +420,24 @@ def section(src, root=None, scope=None):
     return '\n'.join(lines[start:end]).strip()
 
 
-def render(cfg, name, root=None, display_root=None, scope=None):
-    out = []
+def render(cfg, name, root=None, display_root=None, scope=None, seen=None):
+    """Render one topic. With seen, omit exact sources an earlier topic already printed."""
+    out, current = [], set()
     for s in cfg['topics'][name]['sources']:
         where = s['path']
         if display_root is not None:
             where = os.path.relpath(os.path.join(ROOT if root is None else root,
                                                where.replace('\\', '/')), display_root).replace(os.sep, '/')
         where += f' § {s["heading"]}' if 'heading' in s else ''
-        out.append(f'<!-- {where} -->\n{section(s, root=root, scope=scope)}')
+        body = section(s, root=root, scope=scope)  # validate even when omitted
+        # Same owner root and identical source entry only: overlapping sections,
+        # other path spellings and repeats inside one topic are kept.
+        key = (ROOT if root is None else root, json.dumps(s, sort_keys=True))
+        current.add(key)
+        if seen is None or key not in seen:
+            out.append(f'<!-- {where} -->\n{body}')
+    if seen is not None:
+        seen.update(current)
     return '\n\n'.join(out)
 
 
@@ -1289,6 +1298,13 @@ def main(argv):
             failed += check(mounted, root=entry.root, namespace=entry.name + '/', summary=False)
         print(f'{failed} root(s) failed' if failed else 'ok')
         return int(bool(failed))
+    # A local topic literally named --dedupe keeps priority over the option.
+    dedupe = args[0] == '--dedupe' and '--dedupe' not in cfg['topics']
+    if dedupe:
+        args = args[1:]
+        if not args:
+            print('--dedupe requires at least one topic', file=sys.stderr)
+            return 1
     loaded, selected = {}, []
     for requested in args:
         prefix, separator, topic = requested.partition('/')
@@ -1307,11 +1323,13 @@ def main(argv):
         except (OSError, ValueError) as error:
             print(f'{diagnostic(requested)}: {diagnostic(error)}', file=sys.stderr)
             return 1
-    bodies = []
+    bodies, seen = [], set() if dedupe else None
     for requested, owner_cfg, topic, owner_root in selected:
         try:
-            bodies.append(render(owner_cfg, topic, root=owner_root,
-                                 display_root=ROOT if owner_root is not None else None))
+            body = render(owner_cfg, topic, root=owner_root,
+                          display_root=ROOT if owner_root is not None else None, seen=seen)
+            if body or not dedupe:
+                bodies.append(body)
         except (OSError, ValueError) as error:
             print(f'{diagnostic(requested)}: {diagnostic(error)}', file=sys.stderr)
             return 1
