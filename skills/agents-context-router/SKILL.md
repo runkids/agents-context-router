@@ -26,7 +26,7 @@ The layout also **maintains itself** once this skill is gone, because every piec
 - The kernel's "Keep the docs true" rule makes every agent, on every task, fix a stale doc in the same change that makes it stale.
 - `wiki/ai-context.md` is the procedure.
 - `check` fails on orphans and budget overruns.
-- CI runs `check`, so drift breaks the build instead of rotting quietly.
+- CI runs `check` for structural drift; targeted review verifies affected claims against their evidence.
 
 Leaving out any one of these four is how routed docs decay back into a pile.
 
@@ -51,7 +51,7 @@ Read the whole file and put each section into exactly one bucket:
 | **History** | Dated milestone logs, acceptance runs, "what we did in M3". | `wiki/history/<milestone>.md` |
 | **Human** | Intro, screenshots, setup for people. | `README.md` |
 
-Some text changes buckets. A behaviour rule learned the hard way (for example "if every job fails the same way, suspect our code before the site") is kernel. The procedure for acting on it is topic. A history section that is still the operating manual (a "Usage" section in a milestone log) stays in history, and a topic references its exact heading.
+Some text changes buckets. A lesson belongs in its task topic unless an agent would act wrongly on an unrelated task without it. Only then promote a one-line kernel rule, keeping its procedure in the topic. Do not equate an important lesson with an always-needed rule. A history section that is still the operating manual (a "Usage" section in a milestone log) stays in history, and a topic references its exact heading.
 
 ### 3. Move, then write
 
@@ -124,7 +124,8 @@ Wire `check` into whatever the repo already runs on every change. Use the one th
 ### 6. Verify and report
 
 - Run `check` and show its output.
-- Run `ai-context.py <topic>` for two or three topics, and read the output as an agent would. Can you do the task from this alone?
+- Run `ai-context.py <topic>` for affected topics (sample two or three for a large split) and read the output as an agent would. Can you do the task from this alone? Structural checks cannot establish factual accuracy or coverage. Follow source comments to raw files, code, tests or decisions when context is incomplete or contradictory; inspect only what resolves the gap.
+- Keep evidence and status near consequential claims, following the copied manual: distinguish observed results, intended requirements, inferences and unresolved conflicts. Code describes current behavior, not permission to override a hard limit or safety rule. Surface such conflicts to the owner instead of rewriting policy to match implementation.
 - Grep for links to old anchors and moved files, and fix them.
 - Compare the byte totals between the backup and the new tree. A large drop in total bytes, not just kernel bytes, means content was lost rather than moved. Find out where it went.
 
