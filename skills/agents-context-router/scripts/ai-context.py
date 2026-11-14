@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Print only the doc sections a task needs.
 
-usage: ai-context.py list | <topic> [<topic>...] | check | --version
+usage: ai-context.py list | [--dedupe] <topic> [<topic>...] | check | --version
 
 Topics live in wiki/ai-context.json. A source is a whole file or one exact
 heading (the section runs to the next heading of the same or higher level).
@@ -379,7 +379,30 @@ def headings(lines):
             yield i, len(h.group(1)), h.group(2)
 
 
-def section(src, root=None, scope=None):
+def source_document(path, root, outside, scope, cache):
+    """Reuse one file/heading index only within an opted-in render invocation.
+
+    Callers still validate containment and file type for every reference. A
+    metadata change invalidates the entry; a file changing during its read is
+    not cached. Never reuse text across roots or invocations.
+    """
+    def revision():
+        info = os.stat(path)
+        return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+    key = (scope.path, path)
+    before = revision()
+    if key in cache and cache[key][0] == before:
+        return cache[key][1]
+    document = [read_text(path, root, outside, scope=scope).split('\n'), {}]
+    if revision() == before:
+        cache[key] = (before, document)
+    else:
+        cache.pop(key, None)
+    return document
+
+
+def section(src, root=None, scope=None, cache=None):
     root = ROOT if root is None else root
     scope = scope or PhysicalPath(root)
     path = os.path.realpath(os.path.join(root, src['path'].replace('\\', '/')))
@@ -387,10 +410,20 @@ def section(src, root=None, scope=None):
         raise ValueError(f'{src["path"]}: outside repo')
     if not stat.S_ISREG(os.stat(path).st_mode):
         raise ValueError(f'{src["path"]}: expected a regular file')
-    lines = read_text(path, root, f'{src["path"]}: outside repo', scope=scope).split('\n')
+    if cache is None:
+        document = [read_text(path, root, f'{src["path"]}: outside repo', scope=scope).split('\n'), {}]
+    else:
+        document = source_document(path, root, f'{src["path"]}: outside repo', scope, cache)
+    lines = document[0]
     if 'heading' not in src:
         return '\n'.join(lines).strip()
-    hs = list(headings(lines))
+    # Keep indexes separate for any source rendering options (e.g. an opt-in
+    # Markdown dialect), while different headings share the same scan.
+    options = json.dumps({key: value for key, value in src.items()
+                          if key not in ('path', 'heading')}, sort_keys=True)
+    if options not in document[1]:
+        document[1][options] = list(headings(lines))
+    hs = document[1][options]
     hits = [(i, lv) for i, lv, t in hs if t == src['heading']]
     if len(hits) != 1:  # fail closed: a renamed or duplicated heading must not load the wrong text
         raise ValueError(f'{src["path"]}: heading {src["heading"]!r} found {len(hits)}x')
@@ -399,15 +432,27 @@ def section(src, root=None, scope=None):
     return '\n'.join(lines[start:end]).strip()
 
 
-def render(cfg, name, root=None, display_root=None, scope=None):
-    out = []
+def render(cfg, name, root=None, display_root=None, scope=None, cache=None, seen=None):
+    scope = scope or PhysicalPath(ROOT if root is None else root)
+    out, current = [], set()
     for s in cfg['topics'][name]['sources']:
         where = s['path']
         if display_root is not None:
             where = os.path.relpath(os.path.join(ROOT if root is None else root,
                                                where.replace('\\', '/')), display_root).replace(os.sep, '/')
         where += f' § {s["heading"]}' if 'heading' in s else ''
-        out.append(f'<!-- {where} -->\n{section(s, root=root, scope=scope)}')
+        body = section(s, root=root, scope=scope, cache=cache)
+        # Exact configured sources only, never whole-file/section overlap,
+        # identical text in another file, or paths with different markers.
+        if seen is None:
+            out.append(f'<!-- {where} -->\n{body}')
+        else:
+            key = (scope.path, json.dumps(s, sort_keys=True), body)
+            if key not in seen:
+                out.append(f'<!-- {where} -->\n{body}')
+            current.add(key)
+    if seen is not None:
+        seen.update(current)
     return '\n\n'.join(out)
 
 
@@ -1268,6 +1313,14 @@ def main(argv):
             failed += check(mounted, root=entry.root, namespace=entry.name + '/', summary=False)
         print(f'{failed} root(s) failed' if failed else 'ok')
         return int(bool(failed))
+    # Preserve a pre-existing topic literally named --dedupe, including when
+    # it is requested with other topics. Single-topic output stays unchanged.
+    dedupe = args[0] == '--dedupe' and '--dedupe' not in cfg['topics']
+    if dedupe:
+        args = args[1:]
+        if not args:
+            print('--dedupe requires at least one topic', file=sys.stderr)
+            return 1
     loaded, selected = {}, []
     for requested in args:
         prefix, separator, topic = requested.partition('/')
@@ -1287,10 +1340,14 @@ def main(argv):
             print(f'{diagnostic(requested)}: {diagnostic(error)}', file=sys.stderr)
             return 1
     bodies = []
+    cache, seen = ({}, set()) if dedupe and len(selected) > 1 else (None, None)
     for requested, owner_cfg, topic, owner_root in selected:
         try:
-            bodies.append(render(owner_cfg, topic, root=owner_root,
-                                 display_root=ROOT if owner_root is not None else None))
+            body = render(owner_cfg, topic, root=owner_root,
+                          display_root=ROOT if owner_root is not None else None,
+                          cache=cache, seen=seen)
+            if body or seen is None:
+                bodies.append(body)
         except (OSError, ValueError) as error:
             print(f'{diagnostic(requested)}: {diagnostic(error)}', file=sys.stderr)
             return 1

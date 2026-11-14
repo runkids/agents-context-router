@@ -161,6 +161,26 @@ Keep `check` out of bulky trees that hold no instructions, such as generated out
 
 Opt in to discoverability checks outside the wiki with `"indexed": ["projects/*/*-runbook.md"]` (default `[]`). Matching `.md` pages must be topic sources or have their full repo-relative paths named in root instructions, the router index, or rendered topic text. A matching exact path or case-sensitive `"unrouted"` glob also exempts an indexed page when at least one matching reason is a nonblank string. Blank or non-string reasons preserve legacy orphan exceptions, but do not satisfy indexed checks. Indexing includes hidden, dependency, and build directories, excludes `.git`, and does not follow directory symlinks. Indexed patterns use Python fnmatch semantics: `*` crosses `/`; matching is case-sensitive on POSIX and follows platform normalization on Windows. Indexed references do not bypass the existing wiki, history, or nested-instructions checks.
 
+### Combining topics without repeating exact sources
+
+Use `python3 scripts/ai-context.py --dedupe planning operations` to opt in when
+loading multiple topics. The first occurrence of each exact source is printed
+with its normal marker; later occurrences from other topics are omitted. Source
+identity includes its owner root, exact configured path, heading selector, and other source options.
+Different path spellings, files with identical text, whole-file/heading overlap,
+and different headings are not merged. Repetition inside the first topic is
+preserved. Ordinary calls and single-topic output are unchanged; `check` still
+measures every topic independently. An existing local topic literally named
+`--dedupe` takes precedence over the option.
+
+Only this opted-in multi-topic invocation reuses file text and heading indexes.
+Every reference still checks containment and regular-file status; changed file
+metadata invalidates reuse, and a changed rendered body is not deduplicated.
+Nothing is cached on disk or reused by another invocation. As with ordinary
+reads, this is not an atomic snapshot of concurrently edited files. All requested
+sources must succeed before anything is printed, including omitted duplicates.
+
+
 ## Existing router trees
 
 To consume an independent router already present inside the project, add this field to the selected outer config:

@@ -121,3 +121,11 @@ Optional `"skipDirs"` (a list of strings, default `[]`) keeps `check` out of bul
 ## Skills
 
 Skills are workflow adapters. They may call `ai-context.py`, run checks and shorten steps, but no rule may live only in a skill. With no skill installed, this page and the kernel must still be enough.
+
+### Combining topics
+
+`python3 scripts/ai-context.py --dedupe a b` removes only later identical
+owner/path/heading/options sources across topics, preserving markers.
+Default/single-topic output and `check` budgets stay unchanged. Reads/indexes
+are cached only for this call, invalidated by metadata changes; every source
+still validates before output. A local `--dedupe` topic takes precedence.
