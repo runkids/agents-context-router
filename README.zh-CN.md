@@ -198,6 +198,8 @@ wiki/README.md            面向人的 topic 与历史索引
 
 脚本只使用 Python 标准库（Python 3.8+）。示例使用 `python3`；在 Windows 上请改用 `python` 或 `py -3`。skill 会在安装 router 时选择合适的命令。标题引用必须精确匹配；标题缺失或重复时检查会失败，避免重命名后悄悄加载错误内容。
 
+在指定标题的来源上设置 `"frontmatter": true`，标题选择才会跳过文档开头已闭合的 frontmatter（从 `---` 到 `---` 或 `...`），但不验证 YAML 是否有效。省略或设为 `false` 时保留原有标题行为。整页来源保留该内容；没有闭合分隔符时保留原有 Markdown 行为。精确边界规则见维护指南。这不是 OKF 验证器，也不会额外输出元数据。
+
 ## 参与贡献
 
 欢迎提交 Issue 和 Pull Request。Skill 工作流程和 eval 提示词位于 [`skills/agents-context-router/`](skills/agents-context-router/)。

@@ -200,6 +200,8 @@ wiki/README.md            Human-readable topic and history index
 
 The bundled script uses only the Python standard library (Python 3.8+). Examples use `python3`; on Windows use `python` or `py -3` instead. The skill tells the agent to pick the right command when it installs the router. Exact-heading references fail if a heading is missing or duplicated, so a renamed section cannot silently route the wrong instructions.
 
+Set `"frontmatter": true` on a heading-selected source to ignore closed opening frontmatter (`---` through `---` or `...`), without validating YAML. Omitted/false preserves existing heading behavior. Whole-page sources retain it; an unclosed opening delimiter keeps legacy Markdown behavior. The maintenance manual documents the exact boundary rules. This is not an OKF validator or metadata renderer.
+
 ## Contributing
 
 Issues and pull requests are welcome. The skill workflow and eval prompts are in [`skills/agents-context-router/`](skills/agents-context-router/).
