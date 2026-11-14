@@ -527,7 +527,10 @@ class MountOwnershipRegressionTests(MountFixture):
                 self.cfg['mounts'] = dict(pairs)
                 self.save_configs()
                 result = self.cli('check')
-                self.assert_failure(result, 'mount a:', 'mount kb:', 'ancestor/descendant overlap')
+                self.assert_failure(
+                    result,
+                    'mount a: root modules: strict ancestor/descendant overlap with mount kb (modules/kb-core)',
+                    'mount kb: root modules/kb-core: strict ancestor/descendant overlap with mount a (modules)')
                 self.assertNotIn('scoped instructions no topic loads', result.stdout)
                 self.assert_failure(self.cli('list'), 'ancestor/descendant overlap')
                 self.assert_failure(self.cli('kb/guide'), 'ancestor/descendant overlap')

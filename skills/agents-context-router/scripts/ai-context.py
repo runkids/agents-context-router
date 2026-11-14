@@ -275,8 +275,9 @@ def mount_entries(cfg, root=None):
             if entry_in_other == other_in_entry:
                 continue  # The same physical root may have multiple names.
             for current_index, other_mount in ((index, other), (other_index, entry)):
-                message = (f'root {entries[current_index].root}: strict ancestor/descendant '
-                           f'overlap with mount {other_mount.name} ({other_mount.root})')
+                message = (f'root {declarations[entries[current_index].name]["root"]}: strict '
+                           f'ancestor/descendant overlap with mount {other_mount.name} '
+                           f'({declarations[other_mount.name]["root"]})')
                 errors[current_index] = (errors[current_index] + '; ' + message
                                          if errors[current_index] else message)
     return [entry._replace(error=errors[index]) for index, entry in enumerate(entries)]
