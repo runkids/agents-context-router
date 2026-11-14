@@ -198,6 +198,8 @@ wiki/README.md            사람이 읽는 topic 및 기록 목록
 
 포함된 스크립트는 Python 표준 라이브러리만 사용합니다(Python 3.8 이상).예시는 `python3`를 사용합니다. Windows에서는 `python` 또는 `py -3`를 사용하세요. 스킬이 라우터를 설치할 때 알맞은 명령을 고릅니다. 제목을 정확히 참조하며, 제목이 없거나 중복되면 실패하므로 제목이 바뀐 뒤 잘못된 지침이 조용히 로드되지 않습니다.
 
+제목을 지정한 소스에 `"frontmatter": true`를 설정하면 문서 시작의 닫힌 frontmatter(`---`부터 `---` 또는 `...`까지)를 건너뛰며 YAML 유효성을 검사하지 않습니다.생략하거나 `false`이면 기존 제목 동작을 유지합니다. 전체 페이지 소스는 이를 유지하고, 닫는 구분자가 없으면 기존 Markdown 동작을 유지합니다. 정확한 경계 규칙은 관리 가이드를 참고하세요. OKF 검증이나 메타데이터 추가 출력 기능은 아닙니다.
+
 ## 기여
 
 Issue와 Pull Request를 환영합니다. 스킬 절차와 eval 프롬프트는 [`skills/agents-context-router/`](skills/agents-context-router/)에 있습니다.
