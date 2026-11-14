@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/runkids/agents-context-router/compare/v0.2.1...v0.3.0) (2026-11-14)
+
+
+### Features
+
+* mount contained router roots as namespaced topics ([#14](https://github.com/runkids/agents-context-router/issues/14)) ([9415c33](https://github.com/runkids/agents-context-router/commit/9415c33476ec89543031a9f8a8438cfccb0657ee))
+
+
+### Bug Fixes
+
+* show configured roots in the mount overlap diagnostic ([d6f8140](https://github.com/runkids/agents-context-router/commit/d6f8140136b89efa4ee6e351ad1358495b31f94d))
+
 ## [0.2.1](https://github.com/runkids/agents-context-router/compare/v0.2.0...v0.2.1) (2026-10-29)
 
 

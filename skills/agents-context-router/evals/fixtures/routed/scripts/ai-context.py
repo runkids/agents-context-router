@@ -35,7 +35,7 @@ from urllib.parse import unquote
 from html import unescape
 from html.entities import html5
 
-VERSION = '0.2.1'  # x-release-please-version
+VERSION = '0.3.0'  # x-release-please-version
 
 
 def script_root():
