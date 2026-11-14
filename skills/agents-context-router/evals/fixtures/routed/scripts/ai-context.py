@@ -5,6 +5,8 @@ usage: ai-context.py list | <topic> [<topic>...] | check | --version
 
 Topics live in wiki/ai-context.json. A source is a whole file or one exact
 heading (the section runs to the next heading of the same or higher level).
+A source may set "frontmatter": true to exclude a closed opening YAML-style
+envelope from heading discovery; whole-file output and default behavior stay unchanged.
 check also fails on orphans, so docs cannot silently drift out of the router:
 wiki pages no topic loads, history files missing from the router index, and
 nested AGENTS.md files no topic loads, opted-in indexed pages no instructions name, and relative Markdown links are checked.
@@ -335,6 +337,8 @@ def validate_mounted_cfg(cfg, root):
             configured_path(source.get('path'), root, field + '.sources.path')
             if 'heading' in source and not isinstance(source['heading'], str):
                 raise ValueError(f'{field}.sources.heading: expected a string')
+            if 'frontmatter' in source and not isinstance(source['frontmatter'], bool):
+                raise ValueError(f'{field}.sources.frontmatter: expected a boolean')
 
 
 def load_mount(entry):
@@ -363,10 +367,24 @@ def load_mount(entry):
     return cfg
 
 
-def headings(lines):
-    """Yield (index, level, text), skipping headings inside fenced code (e.g. shell comments)."""
+def frontmatter_end(lines):
+    """Return the end of a closed leading frontmatter envelope, without parsing YAML."""
+    if not lines or lines[0].lstrip('\ufeff').rstrip(' \t\r') != '---':
+        return 0
+    for i in range(1, len(lines)):
+        if lines[i].rstrip(' \t\r') in ('---', '...'):
+            return i + 1
+    # A leading thematic break without a closing delimiter is ordinary Markdown.
+    return 0
+
+
+def headings(lines, frontmatter=False):
+    """Yield original line indexes, ignoring opted-in frontmatter and fenced code."""
     fence = None
+    start = frontmatter_end(lines) if frontmatter else 0
     for i, ln in enumerate(lines):
+        if i < start:
+            continue
         m = FENCE.match(ln)
         if m:
             mark = m.group(1)
@@ -382,6 +400,9 @@ def headings(lines):
 def section(src, root=None, scope=None):
     root = ROOT if root is None else root
     scope = scope or PhysicalPath(root)
+    frontmatter = src.get('frontmatter', False)
+    if not isinstance(frontmatter, bool):
+        raise ValueError(f'{src["path"]}: frontmatter: expected a boolean')
     path = os.path.realpath(os.path.join(root, src['path'].replace('\\', '/')))
     if not inside_root(path, scope):
         raise ValueError(f'{src["path"]}: outside repo')
@@ -390,7 +411,7 @@ def section(src, root=None, scope=None):
     lines = read_text(path, root, f'{src["path"]}: outside repo', scope=scope).split('\n')
     if 'heading' not in src:
         return '\n'.join(lines).strip()
-    hs = list(headings(lines))
+    hs = list(headings(lines, frontmatter=frontmatter))
     hits = [(i, lv) for i, lv, t in hs if t == src['heading']]
     if len(hits) != 1:  # fail closed: a renamed or duplicated heading must not load the wrong text
         raise ValueError(f'{src["path"]}: heading {src["heading"]!r} found {len(hits)}x')
