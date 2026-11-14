@@ -157,7 +157,33 @@ AI_CONTEXT_ROOT=/work/repo AI_CONTEXT_CONFIG=/work/settings/router.json \
 
 有意保留的未路由文件例外应放在 `"unrouted"` 中，使用精确路径或 fnmatch glob，并为每项提供理由。例如，`"projects/*/AGENTS.md": "Agents load these scoped instructions by cwd."` 会豁免这些文件。匹配区分大小写，键中的反斜杠会规范化为 `/`。`*`、`?` 和方括号字符类遵循 Python fnmatch 语义：`*` 可以跨越 `/`，因此该示例也会匹配 `projects/team/api/AGENTS.md`；`**` 没有特殊的递归含义。无论文件是否存在，键既匹配自身，也作为模式参与匹配：`wiki/file[1].md` 会同时豁免自身和 `wiki/file1.md`。使用 `wiki/file[[]1].md` 可豁免带有字面方括号的文件名，而不会同时豁免 `wiki/file1.md`。未匹配到的未路由文件仍会导致 `check` 失败。
 
-对于不含指令的大型目录树，例如生成的输出或证据转储，可用 `"skipDirs": ["projects/*/artifacts"]`（默认 `[]`）让 `check` 不再遍历它们。每项是相对仓库的目录精确路径或区分大小写的 fnmatch glob，匹配方式与 `"unrouted"` 的键相同（`*` 可跨越 `/`）。`check` 不会进入匹配的目录，因此除非有 topic 路由其中的页面，这些页面不会参与孤立页面、indexed 和链接检查。wiki 目录始终会被遍历。
+对于不含指令的大型目录树，例如生成的输出或证据转储，可用 `"skipDirs": ["projects/*/artifacts"]`（默认 `[]`）让 `check` 不再遍历它们。每项是相对仓库的目录精确路径或区分大小写的 fnmatch glob，匹配方式与 `"unrouted"` 的键相同（`*` 可跨越 `/`）。`check` 不会进入匹配的目录，因此除非页面列为 topic 的来源或选作 router 索引，这些页面不会参与孤立页面、indexed 和链接检查。每个根目录的 wiki 都会被遍历，但挂载目录树从外层扫描中排除，并接受独立检查。
+
+## 已有的 router 目录树
+
+要使用项目内已经存在的独立 router，请在选中的外层配置中添加此字段：
+
+```json
+"mounts": {
+  "kb": { "root": "modules/kb-core" }
+}
+```
+
+内层配置默认为 `wiki/ai-context.json`；可选的 `"config": "context/router.json"` 可选择该根目录内的其他配置。使用项目选定的脚本和环境：
+
+```bash
+python3 scripts/ai-context.py list
+python3 scripts/ai-context.py build-deploy kb/guide
+python3 scripts/ai-context.py check
+```
+
+`list` 会追加带有 `[modules/kb-core]` 来源的 `kb/guide`，输出注释使用相对外层根目录的来源路径。模块保留不带前缀的 `guide`，以及自己的配置、指令和索引。外层表格只列本地 topic，挂载 topic 用 `list` 发现。`check` 分别使用每个根目录自己的发现规则、字节上限、孤立页面／history／indexed／链接规则和例外。topic 按根目录原生渲染的字节数计量，包含原生来源注释；更长的挂载显示路径不会增加模块的计量值。kernel 文本计量保留首尾空白。超限时拆分 topic，不提高上限。
+
+挂载名必须是单一路径段，不含斜杠、反斜杠、空白、控制字符、`.` 或 `..`；即使不可用，`kb/` 仍会保留，禁止与本地 topic 冲突。本地 `kb` 和内层 `ops/guide` 仍然有效。解析符号链接后，挂载根目录必须严格位于外层根目录之下；配置、指令、来源、相对链接和扫描都不能越过自己的根目录。允许内部的绝对路径和别名。相对 root 以选中的外层根目录为基准，配置和文档以内层根目录为基准，与 cwd、配置文件位置无关；不展开 `~` 或变量。内层 `mounts` 必须省略或为空。只读取已有数据，不获取模块，也不执行模块脚本。
+
+外层的孤立页面／indexed／wiki 链接自动扫描会排除挂载的物理目录树及别名，即使模块位于外层 wiki 中或内层配置无效。显式指定的外层来源与 router 索引仍会检查。内部根目录缺失时，`list` 输出一条带路径的 `NOTICE`，没有其他错误则返回状态0；`check` 和请求该挂载 topic 都会失败。无效声明／配置、越界目录和嵌套挂载是错误，但 list/check 会继续处理健康条目。topic 请求只读取所选挂载配置，所有名称和正文成功前不输出任何内容。check 最后只给出一个 `ok` 或失败根目录数。
+
+省略 mounts 或使用空对象可保留原有单根目录行为；完整约定见仓库内维护手册。旧的脚本副本需要比较本地修改后主动更新，更新已安装 skill 不会自动替换它们。保留项目配置和文档，用 `--version` 确认所选副本。
 
 ## 仓库结构
 

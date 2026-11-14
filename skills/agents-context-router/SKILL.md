@@ -2,7 +2,7 @@
 name: agents-context-router
 metadata:
   version: "0.2.1" # x-release-please-version
-description: Split a bloated AGENTS.md / CLAUDE.md / README into a small always-loaded kernel plus task-routed wiki topics, loaded on demand by a zero-dependency script (`scripts/ai-context.py list|topic|check`) with byte budgets, so agents stop burning their context window on docs unrelated to the task. Use this skill whenever the user says AGENTS.md or CLAUDE.md is too long, too big or loads too much context; asks to split, slim, reorganize, route or "wiki-fy" repo docs or agent instructions; wants a docs router, progressive disclosure or context budget for coding agents; mentions milestone logs piling up in the README; or wants multiple agents (Claude Code, Codex, Cursor, Gemini) to share one instruction file, even if they never say "router".
+description: Split a bloated AGENTS.md / CLAUDE.md / README into a small always-loaded kernel plus task-routed wiki topics, loaded on demand by a zero-dependency script (`scripts/ai-context.py list|topic|check`) with byte budgets, so agents stop burning their context window on docs unrelated to the task. Use this skill whenever the user says AGENTS.md or CLAUDE.md is too long, too big or loads too much context; asks to split, slim, reorganize, route or "wiki-fy" repo docs or agent instructions; wants a docs router, progressive disclosure or context budget for coding agents; mentions milestone logs piling up in the README; wants to attach an already-present project-contained router tree as namespaced topics; or wants multiple agents (Claude Code, Codex, Cursor, Gemini) to share one instruction file, even if they never say "router".
 ---
 
 # Agents context router
@@ -11,7 +11,7 @@ Coding agents load the root instruction file (AGENTS.md, CLAUDE.md) on every tas
 
 ```
 AGENTS.md                 kernel: rules every task needs + how to load more (≤ 8 KB)
-wiki/ai-context.json      topic → sources (whole file or one exact heading); the single truth
+wiki/ai-context.json      local topic → sources; optional mounts of existing contained routers
 scripts/ai-context.py     list | <topic> | check  (bundled with this skill)
 wiki/README.md            human router table (mirrors the JSON)
 wiki/ai-context.md        in-repo maintenance manual (works without this skill)
@@ -89,7 +89,19 @@ Some text changes buckets. A behaviour rule learned the hard way (for example "i
 
    To check discoverability outside `wiki/`, opt in with `"indexed": ["projects/*/*-runbook.md"]` (default `[]`). `indexed` must be a list of strings. Matching `.md` files participate across repo directories, including hidden, dependency, and build directories; `.git` metadata is excluded. Directory symlinks are not followed; patterns and references use real repo-relative paths, and files in real directories are inspected once without alias traversal. Patterns use forward-slash repo-relative paths and Python `fnmatch`: `*` crosses `/`, matching is case-sensitive on POSIX and follows platform normalization on Windows. Each matching page must be a topic source (whole file or selected heading), or its full repo-relative path must occur in root instructions, the configured router file, or successfully rendered topic text. Only selected sections count; a basename or relative link without that full string does not. Fix a failure by naming it in a topic page, routing it as a source, or adding an exact path or matching case-sensitive glob under `"unrouted"` with a nonblank string reason. If multiple exceptions match, any nonblank string reason exempts the page from the indexed check. Blank or non-string reasons still exempt legacy orphans, but do not satisfy an indexed check. Indexed references do not replace the existing wiki, history, or nested-instructions rules.
 
-   Keep `check` out of bulky trees that hold no instructions, such as generated output or evidence dumps, with `"skipDirs": ["projects/*/artifacts"]` (default `[]`): exact repo-relative directory paths or case-sensitive fnmatch globs, matched like `"unrouted"` keys. `check` does not walk into a matching directory, so pages there are checked only when a topic routes them. The wiki directory is always walked, and a value that is not a list of strings fails `check`.
+   Keep `check` out of bulky trees that hold no instructions, such as generated output or evidence dumps, with `"skipDirs": ["projects/*/artifacts"]` (default `[]`): exact repo-relative directory paths or case-sensitive fnmatch globs, matched like `"unrouted"` keys. `check` does not walk into a matching directory; explicit sources and the explicit router file still get checked. Each owner's wiki is walked except for mounted trees, which get independent checks. A value that is not a list of strings fails `check`.
+
+7. **Consume an existing contained router when needed.** In the selected outer config, add `"mounts": {"kb": {"root": "modules/kb-core"}}`. The tree must already contain its own config (`wiki/ai-context.json` by default), instructions and index; optional `"config": "context/router.json"` selects another config inside that root. Keep its topic definitions and unqualified discovery names in its own files. The outer kernel/index tables mirror only local topics; use `list` to discover mounted topics. Use the selected project script, never a module script:
+
+   ```sh
+   python3 scripts/ai-context.py list
+   python3 scripts/ai-context.py build-deploy kb/guide
+   python3 scripts/ai-context.py check
+   ```
+
+   Mount names reserve `name/` against local topic collisions and allow no slash, backslash, whitespace, controls, `.` or `..`. Roots must be strict physical descendants; config/content/checked relative links stay inside their owner after symlinks. Relative roots use the outer root; relative config/docs use the inner root. Contained absolute paths work, without tilde/variable expansion. Inner mounts must be absent or empty. The router reads existing data and neither fetches a module nor executes it.
+
+   `check` applies each root's own discovery, budgets, orphan/history/indexed/link rules and exceptions. Native topic bytes exclude longer mounted display prefixes; the unstripped kernel keeps its own cap. Outer automatic inventories exclude mounted physical trees and aliases, including when an inner config is invalid; explicit outer sources/router still get checked. A contained missing root is a path-bearing `list` notice/status 0 unless another error occurs, but fails `check` or a selected topic. Other mount/config errors fail while healthy list/check entries continue. Topic calls load only requested mounted configs and buffer every body before printing, so a late error leaves stdout empty. See the copied manual for the full contract; absent/empty mounts retain existing behavior. Compare local customizations before deliberately replacing an older copied router; updating this skill alone does not update that copy.
 
 ### 4b. Make drift fail the build
 
@@ -136,3 +148,4 @@ Upkeep is the job of the repo's own `wiki/ai-context.md` and the kernel rule, no
 - **New milestone:** add `wiki/history/<m>.md` and one row in the history index. Nothing is added to the kernel unless it is a rule for every task.
 - **Kernel near its budget:** that is the signal to move something out, not to raise the cap.
 - **Orphan failure:** map the page to a topic, index the history file, or list a deliberate exception under `"unrouted"` with a reason (human-only pages or scoped instructions loaded by cwd).
+- **Mounted knowledge:** edit the owning root's config/pages/local tables, then run the selected project router's `list`, requested namespaced topic and `check`. Do not copy inner topics into outer discovery tables or use outer budgets/exceptions to hide inner failures. Keep the in-repo manual's mount contract with the copied router.
