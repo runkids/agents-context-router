@@ -90,10 +90,20 @@ def inside_root(path, root, allow_root=False):
         return False
 
 
+def case_alias_candidate(path, root):
+    """Cheap rejection only; filesystem identity must still confirm an alias."""
+    path, root = (unicodedata.normalize('NFD', value).casefold() for value in (path, root))
+    try:
+        return os.path.commonpath([path, root]) == root
+    except ValueError:
+        return False
+
+
 class PhysicalPath:
     """A physical root resolved once for a bounded operation, never globally cached."""
     def __init__(self, path):
         self.path = os.path.normcase(os.path.realpath(path))
+        self.identity = None
 
     def contains(self, path, allow_root=False):
         path = os.path.normcase(os.path.realpath(path))
@@ -103,13 +113,21 @@ class PhysicalPath:
         except (OSError, ValueError):
             pass
 
-        # macOS volumes may ignore case while realpath preserves the requested
-        # spelling. Only pay for filesystem identity checks when lexical paths
-        # differ; case-sensitive filesystems keep distinct roots distinct.
+        # Reject unrelated trees before touching their filesystem metadata.
+        # Case folding is only a filter, never proof of physical containment.
+        if not case_alias_candidate(path, self.path):
+            return False
+        if self.identity is None:
+            try:
+                info = os.stat(self.path)
+                self.identity = (info.st_dev, info.st_ino)
+            except (OSError, ValueError):
+                return False
         current, depth = path, 0
         while True:
             try:
-                if os.path.samefile(current, self.path):
+                info = os.stat(current)
+                if (info.st_dev, info.st_ino) == self.identity:
                     return allow_root or depth > 0
             except (OSError, ValueError):
                 pass
@@ -200,11 +218,13 @@ def mount_entries(cfg, root=None):
         return []
     protected = []
     wiki_value = cfg.get('wikiDir', 'wiki')
-    try:
-        path = os.path.realpath(configured_path(wiki_value, root, 'wikiDir', allow_root=True))
-        protected.append(('wikiDir', path, wiki_value))
-    except (OSError, ValueError):
-        pass  # The outer check reports an invalid wikiDir separately.
+    for field, value in [('wikiDir', wiki_value),
+                         ('historyDir', cfg.get('historyDir', f'{wiki_value}/history'))]:
+        try:
+            path = os.path.realpath(configured_path(value, root, field, allow_root=True))
+            protected.append((field, path, value))
+        except (OSError, ValueError):
+            pass  # The outer check reports an invalid inventory path separately.
     for field, value in [('config', CFG_PATH),
                          ('rootInstructions', cfg.get('rootInstructions', 'AGENTS.md'))]:
         try:
@@ -236,10 +256,7 @@ def mount_entries(cfg, root=None):
                 raise ValueError(f'namespace collision: local topic reserves {name}/')
             root_identity = PhysicalPath(mounted_root)
             for field, path, display in protected:
-                if field == 'wikiDir':
-                    if root_identity.contains(path, allow_root=True):
-                        raise ValueError(f'root {declaration["root"]}: contains outer wikiDir {display}')
-                elif root_identity.contains(path, allow_root=True):
+                if root_identity.contains(path, allow_root=True):
                     raise ValueError(f'root {declaration["root"]}: contains outer {field} {display}')
         except (OSError, ValueError) as failure:
             error = str(failure)

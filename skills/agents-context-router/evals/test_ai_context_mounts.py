@@ -465,6 +465,35 @@ class MountOwnershipRegressionTests(MountFixture):
         self.write('wiki/ai-context.json', json.dumps(self.cfg))
         self.assert_failure(self.cli('check'), 'docs/wiki/orphan.md: wiki page no topic loads')
 
+    def test_mount_cannot_contain_outer_history(self):
+        self.write('modules/kb-core/logs/unindexed.md', '# Unindexed\n')
+        for history in ['modules/kb-core/logs', 'modules/kb-core']:
+            with self.subTest(historyDir=history):
+                self.cfg['historyDir'] = history
+                self.save_configs()
+                self.assert_failure(self.cli('check'), 'mount kb:', 'contains outer historyDir')
+        self.symlink(self.root / 'history-alias', self.module_root / 'logs', directory=True)
+        self.cfg['historyDir'] = 'history-alias'
+        self.save_configs()
+        self.assert_failure(self.cli('check'), 'mount kb:', 'contains outer historyDir')
+
+    def test_mount_cannot_replace_default_outer_history(self):
+        target = self.root / 'wiki/history'
+        self.module_root.rename(target)
+        self.module_root = target
+        self.cfg['mounts']['kb']['root'] = 'wiki/history'
+        self.save_configs()
+        self.assert_failure(self.cli('check'), 'mount kb:', 'contains outer historyDir')
+        # A module below that history tree still owns only its own subtree.
+        target.rename(self.root / 'modules/kb-core')
+        target.mkdir()
+        (self.root / 'modules/kb-core').rename(target / 'module')
+        self.module_root = target / 'module'
+        self.cfg['mounts']['kb']['root'] = 'wiki/history/module'
+        self.save_configs()
+        result = self.cli('check')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_mount_cannot_equal_outer_wiki(self):
         self.cfg['wikiDir'] = 'modules/kb-core'
         self.save_configs()
