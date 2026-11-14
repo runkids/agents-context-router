@@ -81,13 +81,22 @@ Update docs **in the same change** that makes them stale:
 | You did this | Update this |
 |---|---|
 | Changed behaviour a topic describes | That topic's page |
-| Found a doc that contradicts the code | Fix the doc, because the code wins; mention it in your handoff |
-| Learned a lesson the hard way | A one-line kernel rule plus the procedure in its topic |
+| Found a descriptive claim that contradicts code/tests | Verify and fix the stale description; report the evidence |
+| Code conflicts with a hard limit, safety rule or intended requirement | Surface the conflict to the owner; do not weaken the rule to match code |
+| Learned a lesson the hard way | Keep it in its topic; promote a one-line kernel rule only if every task needs it |
 | Finished a milestone | Add `wiki/history/<milestone>.md` and one index row in `wiki/README.md` |
 | Added a new kind of recurring task | Add a new topic: page, JSON entry, and both tables |
 | Added a nested `AGENTS.md` | Map it in some topic, or record a reason-bearing exception if loaded by cwd |
 
 Leave volatile state out of the docs: progress counts, who is doing what this week, today's blocker. Those belong in the tracker.
+
+## Evidence and review
+
+For consequential claims (safety, compatibility, limits or verification), keep a nearby source path/heading, test or decision reference, its revision/date when relevant, and status: observed, intended, inferred or unresolved. Distinguish a recorded test result from a current guarantee. Reuse existing evidence; no new metadata system is needed.
+
+When a topic is incomplete, stale or contradictory, follow its source comments and inspect the relevant raw file, code, tests or decision. Load only what resolves the gap. Record unresolved conflicts rather than silently treating implementation as policy.
+
+After a change, render the affected topics and review their claims against those sources. Check moved material for lost hard limits and missing task triggers. Review unchanged pages only when a changed claim depends on them; this is not a whole-wiki audit.
 
 ## Adding or changing a topic
 
@@ -116,7 +125,7 @@ An indexed page must be a topic source, including a heading-selected source, or 
 
 Optional `"skipDirs"` (a list of strings, default `[]`) keeps `check` out of bulky trees that hold no instructions, such as generated output or evidence dumps: exact repo-relative directory paths or case-sensitive fnmatch globs, matched like `"unrouted"` keys. Pages inside a skipped directory are checked only when a topic routes them or the path is the explicit router file. The owner's wiki is always walked except for mounted trees, which get their own checks as described above.
 
-`check` runs in CI, so drift fails the build instead of rotting quietly.
+`check` runs in CI to catch structural drift. Passing does not establish factual accuracy, policy compliance, freshness or complete task coverage; the targeted review above is still needed.
 
 ## Skills
 

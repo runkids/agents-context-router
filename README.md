@@ -144,6 +144,8 @@ python3 scripts/ai-context.py check
 
 `list` shows available topics. A topic command prints only its mapped sections, marked with their source paths. `check` validates the router and its configured limits. Relative Markdown links are always checked in complete routed sources, wiki pages (including history and routing exceptions), and pages matched by optional `indexed` patterns. Destinations resolve from the containing page and must be files inside the repository; heading fragments are not validated.
 
+`check` validates structure, not factual accuracy or policy compliance. Keep task-specific lessons in topics; only rules needed on every task belong in the kernel. The generated maintenance manual explains evidence/status notes, raw-source fallback and targeted review of changed claims.
+
 You can also keep one installed script outside the repository, with no local `scripts/` directory:
 
 ```bash
