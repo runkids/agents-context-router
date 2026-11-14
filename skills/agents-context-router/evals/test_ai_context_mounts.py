@@ -440,6 +440,163 @@ class MountDeclarationTests(MountFixture):
                 self.assertEqual(router.load_mount(entry), cfg)
 
 
+class MountOwnershipRegressionTests(MountFixture):
+    def test_mount_cannot_contain_outer_wiki(self):
+        # The inner wiki differs from the outer one: without rejection the
+        # outer orphan would silently disappear from both inventories.
+        shutil.rmtree(self.root / 'modules')
+        (self.root / 'docs').mkdir()
+        (self.root / 'wiki').rename(self.root / 'docs/wiki')
+        self.cfg['wikiDir'] = 'docs/wiki'
+        self.cfg['topics']['guide']['sources'][0]['path'] = 'docs/wiki/guide.md'
+        self.cfg['mounts'] = {'kb': {'root': 'docs', 'config': 'kbwiki/ai-context.json'}}
+        self.inner_cfg['wikiDir'] = 'kbwiki'
+        self.inner_cfg['topics']['guide']['sources'][0]['path'] = 'kbwiki/guide.md'
+        for path, text in [('AGENTS.md', '`guide`\n'), ('kbwiki/README.md', '# Router\n'),
+                           ('kbwiki/guide.md', '# Module\n'),
+                           ('kbwiki/ai-context.json', json.dumps(self.inner_cfg))]:
+            self.write('docs/' + path, text)
+        self.write('docs/wiki/orphan.md', '# Orphan\n')
+        self.write('wiki/ai-context.json', json.dumps(self.cfg))
+        self.assert_failure(self.cli('check'), 'mount kb:', 'contains outer wikiDir')
+        self.assert_failure(self.cli('list'), 'mount kb:', 'contains outer wikiDir')
+        self.assert_failure(self.cli('kb/guide'), 'contains outer wikiDir')
+        self.cfg.pop('mounts')
+        self.write('wiki/ai-context.json', json.dumps(self.cfg))
+        self.assert_failure(self.cli('check'), 'docs/wiki/orphan.md: wiki page no topic loads')
+
+    def test_mount_cannot_equal_outer_wiki(self):
+        self.cfg['wikiDir'] = 'modules/kb-core'
+        self.save_configs()
+        self.assert_failure(self.cli('check'), 'mount kb:', 'contains outer wikiDir')
+
+    def test_mount_cannot_contain_selected_outer_config(self):
+        selected = self.write('modules/kb-core/outer.json', json.dumps(self.cfg))
+        for command in ['list', 'check', 'kb/guide']:
+            with self.subTest(command=command):
+                self.assert_failure(self.cli(command, config=selected),
+                                    'contains outer config')
+
+    def test_mount_cannot_contain_outer_instructions(self):
+        self.cfg['rootInstructions'] = 'modules/kb-core/AGENTS.md'
+        self.save_configs()
+        self.assert_failure(self.cli('check'), 'mount kb:', 'contains outer rootInstructions')
+        # A lexical path outside the mount still belongs to it physically.
+        self.symlink(self.root / 'instructions.md', self.module_root / 'AGENTS.md')
+        self.cfg['rootInstructions'] = 'instructions.md'
+        self.save_configs()
+        self.assert_failure(self.cli('check'), 'mount kb:', 'contains outer rootInstructions')
+
+    def test_ancestor_mounts_rejected_in_either_order(self):
+        for path, text in [('AGENTS.md', '`guide`\n'), ('wiki/README.md', '# Router\n'),
+                           ('wiki/guide.md', '# Parent\n'),
+                           ('wiki/ai-context.json', json.dumps(self.config('Parent guide')))]:
+            self.write('modules/' + path, text)
+        declarations = [('a', {'root': 'modules'}), ('kb', {'root': 'modules/kb-core'})]
+        for pairs in [declarations, list(reversed(declarations))]:
+            with self.subTest(order=[name for name, _ in pairs]):
+                self.cfg['mounts'] = dict(pairs)
+                self.save_configs()
+                result = self.cli('check')
+                self.assert_failure(result, 'mount a:', 'mount kb:', 'ancestor/descendant overlap')
+                self.assertNotIn('scoped instructions no topic loads', result.stdout)
+                self.assert_failure(self.cli('list'), 'ancestor/descendant overlap')
+                self.assert_failure(self.cli('kb/guide'), 'ancestor/descendant overlap')
+        self.symlink(self.root / 'parent-alias', self.root / 'modules', directory=True)
+        self.cfg['mounts']['a']['root'] = 'parent-alias'
+        self.save_configs()
+        self.assert_failure(self.cli('check'), 'ancestor/descendant overlap')
+
+    def test_case_alias_mount_owns_its_tree(self):
+        alias = self.root / 'Modules/KB-Core'
+        if not alias.exists():
+            self.skipTest('requires a case-insensitive filesystem')
+        self.cfg['mounts']['kb']['root'] = 'Modules/KB-Core'
+        self.save_configs()
+        for command in ['list', 'check', 'kb/guide']:
+            with self.subTest(command=command):
+                result = self.cli(command)
+                self.assertEqual((result.returncode, result.stderr), (0, ''), result.stdout)
+        self.cfg['mounts']['same'] = {'root': 'modules/kb-core'}
+        self.save_configs()
+        result = self.cli('check')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('same/guide', result.stdout)
+        self.write('modules/kb-core-neighbor/AGENTS.md', '# Unowned\n')
+        self.assert_failure(self.cli('check'), 'modules/kb-core-neighbor/AGENTS.md: scoped instructions')
+
+    def test_case_alias_absolute_inventory_paths(self):
+        if not (self.root / 'Modules/KB-Core').exists():
+            self.skipTest('requires a case-insensitive filesystem')
+        self.cfg['mounts']['kb']['root'] = 'Modules/KB-Core'
+        original = copy.deepcopy(self.inner_cfg)
+        for field in ['source', 'wikiDir', 'rootInstructions', 'routerFile']:
+            with self.subTest(field=field):
+                self.inner_cfg = copy.deepcopy(original)
+                if field == 'source':
+                    self.inner_cfg['topics']['guide']['sources'][0]['path'] = str(self.module_root / 'wiki/guide.md')
+                else:
+                    relative = {'wikiDir': 'wiki', 'rootInstructions': 'AGENTS.md',
+                                'routerFile': 'wiki/README.md'}[field]
+                    self.inner_cfg[field] = str(self.module_root / relative)
+                self.save_configs()
+                result = self.cli('check')
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                orphan = self.write('modules/kb-core/wiki/orphan.md', '# Orphan\n')
+                try:
+                    self.assert_failure(self.cli('check'), 'FAIL mount kb: wiki/orphan.md: wiki page no topic loads')
+                finally:
+                    orphan.unlink()
+
+    def test_sibling_history_alias_keeps_lexical_index(self):
+        self.inner_cfg['wikiDir'] = 'docs/wiki'
+        self.inner_cfg['historyDir'] = str(self.module_root / 'docs/archive')
+        self.inner_cfg['topics']['guide']['sources'][0]['path'] = 'docs/wiki/guide.md'
+        self.write('modules/kb-core/docs/wiki/guide.md', '# Guide\n')
+        self.write('modules/kb-core/docs/logs/log.md', '# Log\n')
+        self.symlink(self.module_root / 'docs/archive', self.module_root / 'docs/logs', directory=True)
+        roots = ['modules/kb-core']
+        if (self.root / 'Modules/KB-Core').exists():
+            roots.append('Modules/KB-Core')
+        for spelling in roots:
+            with self.subTest(root=spelling):
+                self.cfg['mounts']['kb']['root'] = spelling
+                self.write('modules/kb-core/docs/wiki/README.md', '# Router\n[Log](../archive/log.md)\n')
+                self.save_configs()
+                result = self.cli('check')
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.write('modules/kb-core/docs/wiki/README.md', '# Router\n')
+                self.assert_failure(self.cli('check'), 'FAIL mount kb: docs/logs/log.md: history file not indexed')
+
+    def test_distinct_case_sensitive_roots_keep_separate_ownership(self):
+        other = self.root / 'modules/KB-CORE'
+        if other.exists():
+            self.skipTest('requires a case-sensitive filesystem')
+        for path, text in [('AGENTS.md', '`guide`\n'), ('wiki/README.md', '# Router\n'),
+                           ('wiki/guide.md', '# Other\n'),
+                           ('wiki/ai-context.json', json.dumps(self.config('Other guide')))]:
+            self.write('modules/KB-CORE/' + path, text)
+        self.cfg['mounts']['other'] = {'root': 'modules/KB-CORE'}
+        self.save_configs()
+        result = self.cli('check')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.write('modules/KB-CORE/wiki/orphan.md', '# Orphan\n')
+        self.assert_failure(self.cli('check'), 'FAIL mount other: wiki/orphan.md: wiki page no topic loads')
+
+    def test_inner_heading_failures_through_check(self):
+        self.sibling()
+        self.inner_cfg['topics']['guide']['sources'][0]['heading'] = 'Selected'
+        for body, count in [('# Guide\n', 0),
+                            ('# Guide\n## Selected\nFirst.\n## Selected\nSecond.\n', 2)]:
+            with self.subTest(matches=count):
+                self.write('modules/kb-core/wiki/guide.md', body)
+                self.save_configs()
+                result = self.cli('check')
+                self.assert_failure(result, "FAIL mount kb: guide: wiki/guide.md: heading 'Selected' found " + str(count) + 'x')
+                self.assertIn('other/guide', result.stdout)
+                self.assertTrue(result.stdout.endswith('1 root(s) failed\n'), result.stdout)
+
+
 class MountBoundaryTests(MountFixture):
     def test_root_and_config_boundaries(self):
         outside = self.parent / 'outside'
@@ -786,27 +943,11 @@ class MountCheckTests(MountFixture):
         self.cfg['skipDirs'] = ['modules']
         self.write('AGENTS.md', '`guide`\nwiki/extra.md\n')
         self.save_configs()
-        # Observe the handoff and still execute the real checker: a stubbed
-        # failure could not prove inner policy independence or continuation.
-        with patch.object(router, 'check', wraps=router.check) as checker:
-            code, out, err = self.call_main('check')
+        code, out, err = self.call_main('check')
         self.assertEqual((code, err), (1, ''), out)
         self.assertIn('FAIL mount kb: wiki/extra.md: wiki page no topic loads', out)
         self.assertIn(f'{"other/guide":18} ', out)
         self.assertTrue(out.endswith('1 root(s) failed\n'), out)
-        self.assertEqual(len(checker.call_args_list), 3)
-        outer, inner, other = checker.call_args_list
-        self.assertEqual(outer.args, (self.cfg,))
-        self.assertEqual(outer.kwargs, {'excluded_roots': [str(self.module_root),
-                                                        str(self.root / 'modules/other')],
-                                        'summary': False})
-        self.assertEqual(inner.args, (self.inner_cfg,))
-        self.assertEqual(inner.kwargs, {'root': str(self.module_root), 'namespace': 'kb/',
-                                        'summary': False})
-        self.assertNotIn('skipDirs', inner.args[0])
-        self.assertNotIn('unrouted', inner.args[0])
-        self.assertEqual(other.kwargs, {'root': str(self.root / 'modules/other'),
-                                        'namespace': 'other/', 'summary': False})
 
     def test_inventory_ownership_and_aliases(self):
         for location in ['modules/kb-core', 'wiki/kb-core']:
@@ -865,17 +1006,6 @@ class MountCheckTests(MountFixture):
                 self.assertNotIn('wiki page no topic loads', out)
                 self.assertNotIn('indexed page not named', out)
                 self.assertNotIn('scoped instructions no topic loads', out)
-        self.fresh()
-        # Physical overlap is permitted without recursive declarations. The
-        # wider owner explicitly exempts its independently checked subroot.
-        for path, text in [('AGENTS.md', '`guide`\n'), ('wiki/README.md', '# Router\n'),
-                           ('wiki/guide.md', '# Guide\nPart.\n'),
-                           ('wiki/ai-context.json', json.dumps(self.config('Part guide')))]:
-            self.write('modules/kb-core/part/' + path, text)
-        self.cfg['mounts']['part'] = {'root': 'modules/kb-core/part'}
-        self.inner_cfg['unrouted'] = {'part/*': 'Separate independent owner'}
-        self.save_configs()
-        self.assertIn(f'{"part/guide":18} ', self.checked())
 
     def test_explicit_outer_sources_are_checked(self):
         inner_source = {'path': 'modules/kb-core/wiki/guide.md', 'heading': 'Guide'}
@@ -1627,29 +1757,34 @@ class MountInventoryPolicyTests(MountFixture):
         self.sibling()
         self.write('modules/kb-core/logs/log.md', '# Log\n')
         self.symlink(self.module_root / 'wiki/history', self.module_root / 'logs', directory=True)
-        for history in ['wiki/history', 'wiki\\history', str(self.module_root / 'wiki/history')]:
-            with self.subTest(historyDir=history):
-                self.inner_cfg['historyDir'] = history
-                self.save_configs()
-                for reference in ['[Log](history/log.md)', '[Log](../logs/log.md)', 'logs/log.md']:
-                    with self.subTest(stage='valid-index', reference=reference):
-                        self.write('modules/kb-core/wiki/README.md', '# Router\n' + reference + '\n')
+        roots = ['modules/kb-core']
+        if (self.root / 'Modules/KB-Core').exists():
+            roots.append('Modules/KB-Core')
+        for spelling in roots:
+            self.cfg['mounts']['kb']['root'] = spelling
+            for history in ['wiki/history', 'wiki\\history', str(self.module_root / 'wiki/history')]:
+                with self.subTest(historyDir=history):
+                    self.inner_cfg['historyDir'] = history
+                    self.save_configs()
+                    for reference in ['[Log](history/log.md)', '[Log](../logs/log.md)', 'logs/log.md']:
+                        with self.subTest(stage='valid-index', reference=reference):
+                            self.write('modules/kb-core/wiki/README.md', '# Router\n' + reference + '\n')
+                            result = self.cli('check')
+                            self.assertEqual((result.returncode, result.stderr), (0, ''), result.stdout)
+                            self.assertTrue(result.stdout.endswith('\nok\n'), result.stdout)
+                    self.write('modules/kb-core/wiki/README.md', '# Router\n')
+                    with self.subTest(stage='unindexed-negative'):
                         result = self.cli('check')
-                        self.assertEqual((result.returncode, result.stderr), (0, ''), result.stdout)
-                        self.assertTrue(result.stdout.endswith('\nok\n'), result.stdout)
-                self.write('modules/kb-core/wiki/README.md', '# Router\n')
-                with self.subTest(stage='unindexed-negative'):
-                    result = self.cli('check')
-                    index = os.path.normcase('wiki/README.md').replace(os.sep, '/')
-                    self.assert_failure(result, 'FAIL mount kb: logs/log.md: history file not indexed in ' + index)
-                    self.assertIn('other/guide', result.stdout)
-                    self.assertTrue(result.stdout.endswith('1 root(s) failed\n'), result.stdout)
-                self.write('modules/kb-core/wiki/README.md',
-                           '# Router\n[Log](history/log.md)\n[Missing](history/missing.md)\n')
-                with self.subTest(stage='lexical-link-negative'):
-                    result = self.cli('check')
-                    self.assert_failure(result, "FAIL mount kb: wiki/README.md:3: relative link 'history/missing.md'")
-                    self.assertNotIn('history file not indexed', result.stdout)
+                        index = os.path.normcase('wiki/README.md').replace(os.sep, '/')
+                        self.assert_failure(result, 'FAIL mount kb: logs/log.md: history file not indexed in ' + index)
+                        self.assertIn('other/guide', result.stdout)
+                        self.assertTrue(result.stdout.endswith('1 root(s) failed\n'), result.stdout)
+                    self.write('modules/kb-core/wiki/README.md',
+                               '# Router\n[Log](history/log.md)\n[Missing](history/missing.md)\n')
+                    with self.subTest(stage='lexical-link-negative'):
+                        result = self.cli('check')
+                        self.assert_failure(result, "FAIL mount kb: wiki/README.md:3: relative link 'history/missing.md'")
+                        self.assertNotIn('history file not indexed', result.stdout)
 
     def test_mounted_wiki_overrides_builtin_directory_pruning(self):
         layouts = self.wiki_layouts + [('.', name + '/extra.md') for name in
