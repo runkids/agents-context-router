@@ -144,6 +144,8 @@ python3 scripts/ai-context.py check
 
 `list` 显示可用 topic。指定 topic 名称后，脚本只会输出映射的内容，并标注来源路径。`check` 会验证路由配置和所设上限。
 
+`check` 验证结构，不保证事实正确或符合政策。特定任务的经验留在 topic；只有每个任务都需要的规则才放进 kernel。生成的维护手册说明证据与状态标注、回查原始来源，以及针对变更主张的审查。
+
 也可以在仓库外安装一份共用脚本，无需在仓库内保留 `scripts/` 目录：
 
 ```bash
@@ -159,7 +161,7 @@ AI_CONTEXT_ROOT=/work/repo AI_CONTEXT_CONFIG=/work/settings/router.json \
 
 对于不含指令的大型目录树，例如生成的输出或证据转储，可用 `"skipDirs": ["projects/*/artifacts"]`（默认 `[]`）让 `check` 不再遍历它们。每项是相对仓库的目录精确路径或区分大小写的 fnmatch glob，匹配方式与 `"unrouted"` 的键相同（`*` 可跨越 `/`）。`check` 不会进入匹配的目录，因此除非页面列为 topic 的来源或选作 router 索引，这些页面不会参与孤立页面、indexed 和链接检查。每个根目录的 wiki 都会被遍历，但挂载目录树从外层扫描中排除，并接受独立检查。
 
-`python3 scripts/ai-context.py --dedupe <topic> <topic>`: [opt-in exact-source reuse and its limits](README.md#combining-topics-without-repeating-exact-sources). Default and single-topic output, source markers, and independent `check` budgets are unchanged.
+一次加载多个 topic 时，可用 `python3 scripts/ai-context.py --dedupe <topic> <topic>` 让完全相同的来源只输出一次，保留首次出现的位置与来源标注。默认输出、单个 topic 的输出，以及 `check` 对每个 topic 的独立上限都不变。细节与限制见[英文说明](README.md#combining-topics-without-repeating-exact-sources)。
 
 ## 已有的 router 目录树
 
@@ -199,6 +201,8 @@ wiki/README.md            面向人的 topic 与历史索引
 ```
 
 脚本只使用 Python 标准库（Python 3.8+）。示例使用 `python3`；在 Windows 上请改用 `python` 或 `py -3`。skill 会在安装 router 时选择合适的命令。标题引用必须精确匹配；标题缺失或重复时检查会失败，避免重命名后悄悄加载错误内容。
+
+在指定标题的来源上设置 `"frontmatter": true`，标题选择才会跳过文档开头已闭合的 frontmatter（从 `---` 到 `---` 或 `...`），但不验证 YAML 是否有效。省略或设为 `false` 时保留原有标题行为。整页来源保留该内容；没有闭合分隔符时保留原有 Markdown 行为。精确边界规则见维护指南。这不是 OKF 验证器，也不会额外输出元数据。
 
 ## 参与贡献
 

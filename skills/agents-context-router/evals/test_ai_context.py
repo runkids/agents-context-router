@@ -310,6 +310,32 @@ class CheckTests(unittest.TestCase):
                     self.assertFalse((self.root / source['path']).exists())
                 self.assertIn('FAIL ' + PAGE, output)
 
+    def test_check_does_not_validate_policy_or_evidence_claims(self):
+        self.cfg['indexed'] = []
+        self.write('AGENTS.md', '`guide`\nNever deploy on Fridays.\n')
+        self.write('wiki/guide.md', '# Guide\nFriday deployments are always safe.\n'
+                   'Verified: all deployment tests passed.\n')
+        # Structurally valid prose passes without any implementation or test evidence.
+        self.assertTrue(self.check(0).endswith('ok\n'))
+        self.write('wiki/guide.md', '# Guide\n[Evidence](missing-result.txt)\n')
+        self.assertIn('missing-result.txt', self.check(1))
+
+    def test_selected_evidence_keeps_source_marker_and_raw_context(self):
+        self.cfg['indexed'] = []
+        self.cfg['topics']['guide']['sources'][0]['heading'] = 'Observed'
+        content = ('# Guide\n## Observed\nStatus: observed in a local test.\n'
+                   'Source: tests/retry.py at revision abc123.\n'
+                   '## Unresolved\nProduction behavior is unverified.\n')
+        self.write('wiki/guide.md', content)
+        self.check(0)
+        result = self.run_cli('guide')
+        self.assertEqual((result.returncode, result.stderr), (0, ''))
+        self.assertEqual(result.stdout, '<!-- wiki/guide.md § Observed -->\n'
+                         '## Observed\nStatus: observed in a local test.\n'
+                         'Source: tests/retry.py at revision abc123.\n')
+        # Routing preserves the source, but unselected context needs a raw-source read.
+        self.assertEqual((self.root / 'wiki/guide.md').read_text(encoding='utf-8'), content)
+
     def test_existing_commands_and_fixture(self):
         for args, expected in [(('list',), 'guide              Guide\n'),
                                (('guide',), '<!-- wiki/guide.md -->\n# Guide\nUse this guide.\n')]:

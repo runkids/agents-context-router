@@ -144,6 +144,8 @@ python3 scripts/ai-context.py check
 
 `list`는 사용 가능한 topic을 보여 줍니다. topic 이름을 지정하면 해당 부분만 원본 경로와 함께 출력합니다. `check`는 router와 설정된 한도를 검증합니다.
 
+`check`는 구조를 검증하며 사실의 정확성이나 정책 준수를 보장하지 않습니다. 특정 작업의 교훈은 topic에 두고, 모든 작업에 필요한 규칙만 kernel에 넣으세요. 생성된 유지보수 매뉴얼은 근거와 상태 기록, 원본 확인, 변경된 주장에 대한 집중 검토를 설명합니다.
+
 저장소 안에 로컬 `scripts/` 디렉터리를 두지 않고, 저장소 밖에 설치한 스크립트 하나를 사용할 수도 있습니다.
 
 ```bash
@@ -159,7 +161,7 @@ AI_CONTEXT_ROOT=/work/repo AI_CONTEXT_CONFIG=/work/settings/router.json \
 
 생성된 출력물이나 증거 덤프처럼 지침이 없는 큰 트리는 `"skipDirs": ["projects/*/artifacts"]`(기본값 `[]`)로 `check`의 탐색에서 제외할 수 있습니다. 각 항목은 저장소 기준 디렉터리의 정확한 경로이거나 대소문자를 구분하는 fnmatch glob이며, `"unrouted"` 키와 같은 방식으로 일치시킵니다(`*`는 `/`를 넘어 일치합니다). `check`는 일치하는 디렉터리에 들어가지 않으므로, topic 소스나 명시한 router 색인이 아닌 한 그 안의 페이지는 고아, indexed, 링크 검사를 받지 않습니다. 각 소유 루트의 wiki는 탐색하지만 마운트 트리는 바깥쪽 탐색에서 제외하고 독립적으로 검사합니다.
 
-`python3 scripts/ai-context.py --dedupe <topic> <topic>`: [opt-in exact-source reuse and its limits](README.md#combining-topics-without-repeating-exact-sources). Default and single-topic output, source markers, and independent `check` budgets are unchanged.
+여러 topic을 한 번에 불러올 때 `python3 scripts/ai-context.py --dedupe <topic> <topic>`을 사용하면 완전히 동일한 소스를 한 번만 출력합니다. 처음 나온 위치와 소스 표시는 그대로 유지됩니다. 기본 출력, 단일 topic 출력, `check`의 topic별 한도는 바뀌지 않습니다. 자세한 내용과 제한은 [영문 설명](README.md#combining-topics-without-repeating-exact-sources)을 참고하세요.
 
 ## 기존 router 트리
 
@@ -199,6 +201,8 @@ wiki/README.md            사람이 읽는 topic 및 기록 목록
 ```
 
 포함된 스크립트는 Python 표준 라이브러리만 사용합니다(Python 3.8 이상).예시는 `python3`를 사용합니다. Windows에서는 `python` 또는 `py -3`를 사용하세요. 스킬이 라우터를 설치할 때 알맞은 명령을 고릅니다. 제목을 정확히 참조하며, 제목이 없거나 중복되면 실패하므로 제목이 바뀐 뒤 잘못된 지침이 조용히 로드되지 않습니다.
+
+제목을 지정한 소스에 `"frontmatter": true`를 설정하면 문서 시작의 닫힌 frontmatter(`---`부터 `---` 또는 `...`까지)를 건너뛰며 YAML 유효성을 검사하지 않습니다.생략하거나 `false`이면 기존 제목 동작을 유지합니다. 전체 페이지 소스는 이를 유지하고, 닫는 구분자가 없으면 기존 Markdown 동작을 유지합니다. 정확한 경계 규칙은 관리 가이드를 참고하세요. OKF 검증이나 메타데이터 추가 출력 기능은 아닙니다.
 
 ## 기여
 

@@ -36,7 +36,7 @@ To consume an independent router tree already inside the project, add this optio
 
 The tree must already have its own config with a `topics` object, string descriptions and source lists, plus its own instructions and router index.
 
-Each topic's `sources` is a list of objects with a nonempty `path` and optional string `heading`. Optional path settings are nonempty strings, `indexed`/`skipDirs` are string lists, and `unrouted` is an object. Root/default/per-topic byte caps are nonnegative integers, excluding booleans. Ordinary unknown config fields remain accepted; unknown declaration fields do not.
+Each topic's `sources` is a list of objects with a nonempty `path` and optional string `heading` and boolean `frontmatter` (default `false`). Optional path settings are nonempty strings, `indexed`/`skipDirs` are string lists, and `unrouted` is an object. Root/default/per-topic byte caps are nonnegative integers, excluding booleans. Ordinary unknown config fields remain accepted; unknown declaration fields do not.
 
 Select it through the project router:
 
@@ -81,13 +81,22 @@ Update docs **in the same change** that makes them stale:
 | You did this | Update this |
 |---|---|
 | Changed behaviour a topic describes | That topic's page |
-| Found a doc that contradicts the code | Fix the doc, because the code wins; mention it in your handoff |
-| Learned a lesson the hard way | A one-line kernel rule plus the procedure in its topic |
+| Found a descriptive claim that contradicts code/tests | Verify and fix the stale description; report the evidence |
+| Code conflicts with a hard limit, safety rule or intended requirement | Surface the conflict to the owner; do not weaken the rule to match code |
+| Learned a lesson the hard way | Keep it in its topic; promote a one-line kernel rule only if every task needs it |
 | Finished a milestone | Add `wiki/history/<milestone>.md` and one index row in `wiki/README.md` |
 | Added a new kind of recurring task | Add a new topic: page, JSON entry, and both tables |
 | Added a nested `AGENTS.md` | Map it in some topic, or record a reason-bearing exception if loaded by cwd |
 
 Leave volatile state out of the docs: progress counts, who is doing what this week, today's blocker. Those belong in the tracker.
+
+## Evidence and review
+
+For consequential claims (safety, compatibility, limits or verification), keep a nearby source path/heading, test or decision reference, its revision/date when relevant, and status: observed, intended, inferred or unresolved. Distinguish a recorded test result from a current guarantee. Reuse existing evidence; no new metadata system is needed.
+
+When a topic is incomplete, stale or contradictory, follow its source comments and inspect the relevant raw file, code, tests or decision. Load only what resolves the gap. Record unresolved conflicts rather than silently treating implementation as policy.
+
+After a change, render the affected topics and review their claims against those sources. Check moved material for lost hard limits and missing task triggers. Review unchanged pages only when a changed claim depends on them; this is not a whole-wiki audit.
 
 ## Adding or changing a topic
 
@@ -95,6 +104,8 @@ Leave volatile state out of the docs: progress counts, who is doing what this we
 2. Map it in the active config: `<root>/wiki/ai-context.json` by default, or the file selected by `AI_CONTEXT_CONFIG`. Reference exact headings for large pages.
 3. Add a row to this root's local topic tables in `AGENTS.md` and `wiki/README.md`; mounted topics belong to their owner's tables.
 4. Run `python3 scripts/ai-context.py check`, then render the topic and read it as an agent would.
+
+For a heading source, `"frontmatter": true` skips a closed leading envelope; default/false keeps legacy behavior. First line must be `---` (optional BOM); closure is column-zero `---` or `...`. Trailing spaces/tabs are allowed. No YAML validation occurs. No closer means legacy headings. Whole-file output stays unchanged; sections add no metadata.
 
 ## What check enforces
 
@@ -116,16 +127,12 @@ An indexed page must be a topic source, including a heading-selected source, or 
 
 Optional `"skipDirs"` (a list of strings, default `[]`) keeps `check` out of bulky trees that hold no instructions, such as generated output or evidence dumps: exact repo-relative directory paths or case-sensitive fnmatch globs, matched like `"unrouted"` keys. Pages inside a skipped directory are checked only when a topic routes them or the path is the explicit router file. The owner's wiki is always walked except for mounted trees, which get their own checks as described above.
 
-`check` runs in CI, so drift fails the build instead of rotting quietly.
+`check` runs in CI to catch structural drift. Passing does not establish factual accuracy, policy compliance, freshness or complete task coverage; the targeted review above is still needed.
+
+## Combining topics
+
+`python3 scripts/ai-context.py --dedupe a b` prints each identical source entry (same root, path, heading and options) once, under its first topic. Every source is still validated; single-topic output and `check` budgets are unchanged. A local topic named `--dedupe` takes precedence.
 
 ## Skills
 
 Skills are workflow adapters. They may call `ai-context.py`, run checks and shorten steps, but no rule may live only in a skill. With no skill installed, this page and the kernel must still be enough.
-
-### Combining topics
-
-`python3 scripts/ai-context.py --dedupe a b` removes only later identical
-owner/path/heading/options sources across topics, preserving markers.
-Default/single-topic output and `check` budgets stay unchanged. Reads/indexes
-are cached only for this call, invalidated by metadata changes; every source
-still validates before output. A local `--dedupe` topic takes precedence.

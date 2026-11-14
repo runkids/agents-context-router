@@ -144,6 +144,8 @@ python3 scripts/ai-context.py check
 
 `list` shows available topics. A topic command prints only its mapped sections, marked with their source paths. `check` validates the router and its configured limits. Relative Markdown links are always checked in complete routed sources, wiki pages (including history and routing exceptions), and pages matched by optional `indexed` patterns. Destinations resolve from the containing page and must be files inside the repository; heading fragments are not validated.
 
+`check` validates structure, not factual accuracy or policy compliance. Keep task-specific lessons in topics; only rules needed on every task belong in the kernel. The generated maintenance manual explains evidence/status notes, raw-source fallback and targeted review of changed claims.
+
 You can also keep one installed script outside the repository, with no local `scripts/` directory:
 
 ```bash
@@ -173,13 +175,8 @@ preserved. Ordinary calls and single-topic output are unchanged; `check` still
 measures every topic independently. An existing local topic literally named
 `--dedupe` takes precedence over the option.
 
-Only this opted-in multi-topic invocation reuses file text and heading indexes.
-Every reference still checks containment and regular-file status; changed file
-metadata invalidates reuse, and a changed rendered body is not deduplicated.
-Nothing is cached on disk or reused by another invocation. As with ordinary
-reads, this is not an atomic snapshot of concurrently edited files. All requested
-sources must succeed before anything is printed, including omitted duplicates.
-
+All requested sources must succeed before anything is printed, including
+omitted duplicates.
 
 ## Existing router trees
 
@@ -219,6 +216,8 @@ wiki/README.md            Human-readable topic and history index
 ```
 
 The bundled script uses only the Python standard library (Python 3.8+). Examples use `python3`; on Windows use `python` or `py -3` instead. The skill tells the agent to pick the right command when it installs the router. Exact-heading references fail if a heading is missing or duplicated, so a renamed section cannot silently route the wrong instructions.
+
+Set `"frontmatter": true` on a heading-selected source to ignore closed opening frontmatter (`---` through `---` or `...`), without validating YAML. Omitted/false preserves existing heading behavior. Whole-page sources retain it; an unclosed opening delimiter keeps legacy Markdown behavior. The maintenance manual documents the exact boundary rules. This is not an OKF validator or metadata renderer.
 
 ## Contributing
 

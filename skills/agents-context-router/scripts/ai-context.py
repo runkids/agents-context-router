@@ -5,6 +5,8 @@ usage: ai-context.py list | [--dedupe] <topic> [<topic>...] | check | --version
 
 Topics live in wiki/ai-context.json. A source is a whole file or one exact
 heading (the section runs to the next heading of the same or higher level).
+A source may set "frontmatter": true to exclude a closed opening YAML-style
+envelope from heading discovery; whole-file output and default behavior stay unchanged.
 check also fails on orphans, so docs cannot silently drift out of the router:
 wiki pages no topic loads, history files missing from the router index, and
 nested AGENTS.md files no topic loads, opted-in indexed pages no instructions name, and relative Markdown links are checked.
@@ -335,6 +337,8 @@ def validate_mounted_cfg(cfg, root):
             configured_path(source.get('path'), root, field + '.sources.path')
             if 'heading' in source and not isinstance(source['heading'], str):
                 raise ValueError(f'{field}.sources.heading: expected a string')
+            if 'frontmatter' in source and not isinstance(source['frontmatter'], bool):
+                raise ValueError(f'{field}.sources.frontmatter: expected a boolean')
 
 
 def load_mount(entry):
@@ -363,10 +367,24 @@ def load_mount(entry):
     return cfg
 
 
-def headings(lines):
-    """Yield (index, level, text), skipping headings inside fenced code (e.g. shell comments)."""
+def frontmatter_end(lines):
+    """Return the end of a closed leading frontmatter envelope, without parsing YAML."""
+    if not lines or lines[0].lstrip('\ufeff').rstrip(' \t\r') != '---':
+        return 0
+    for i in range(1, len(lines)):
+        if lines[i].rstrip(' \t\r') in ('---', '...'):
+            return i + 1
+    # A leading thematic break without a closing delimiter is ordinary Markdown.
+    return 0
+
+
+def headings(lines, frontmatter=False):
+    """Yield original line indexes, ignoring opted-in frontmatter and fenced code."""
     fence = None
+    start = frontmatter_end(lines) if frontmatter else 0
     for i, ln in enumerate(lines):
+        if i < start:
+            continue
         m = FENCE.match(ln)
         if m:
             mark = m.group(1)
@@ -379,51 +397,21 @@ def headings(lines):
             yield i, len(h.group(1)), h.group(2)
 
 
-def source_document(path, root, outside, scope, cache):
-    """Reuse one file/heading index only within an opted-in render invocation.
-
-    Callers still validate containment and file type for every reference. A
-    metadata change invalidates the entry; a file changing during its read is
-    not cached. Never reuse text across roots or invocations.
-    """
-    def revision():
-        info = os.stat(path)
-        return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
-
-    key = (scope.path, path)
-    before = revision()
-    if key in cache and cache[key][0] == before:
-        return cache[key][1]
-    document = [read_text(path, root, outside, scope=scope).split('\n'), {}]
-    if revision() == before:
-        cache[key] = (before, document)
-    else:
-        cache.pop(key, None)
-    return document
-
-
-def section(src, root=None, scope=None, cache=None):
+def section(src, root=None, scope=None):
     root = ROOT if root is None else root
     scope = scope or PhysicalPath(root)
+    frontmatter = src.get('frontmatter', False)
+    if not isinstance(frontmatter, bool):
+        raise ValueError(f'{src["path"]}: frontmatter: expected a boolean')
     path = os.path.realpath(os.path.join(root, src['path'].replace('\\', '/')))
     if not inside_root(path, scope):
         raise ValueError(f'{src["path"]}: outside repo')
     if not stat.S_ISREG(os.stat(path).st_mode):
         raise ValueError(f'{src["path"]}: expected a regular file')
-    if cache is None:
-        document = [read_text(path, root, f'{src["path"]}: outside repo', scope=scope).split('\n'), {}]
-    else:
-        document = source_document(path, root, f'{src["path"]}: outside repo', scope, cache)
-    lines = document[0]
+    lines = read_text(path, root, f'{src["path"]}: outside repo', scope=scope).split('\n')
     if 'heading' not in src:
         return '\n'.join(lines).strip()
-    # Keep indexes separate for any source rendering options (e.g. an opt-in
-    # Markdown dialect), while different headings share the same scan.
-    options = json.dumps({key: value for key, value in src.items()
-                          if key not in ('path', 'heading')}, sort_keys=True)
-    if options not in document[1]:
-        document[1][options] = list(headings(lines))
-    hs = document[1][options]
+    hs = list(headings(lines, frontmatter=frontmatter))
     hits = [(i, lv) for i, lv, t in hs if t == src['heading']]
     if len(hits) != 1:  # fail closed: a renamed or duplicated heading must not load the wrong text
         raise ValueError(f'{src["path"]}: heading {src["heading"]!r} found {len(hits)}x')
@@ -432,8 +420,8 @@ def section(src, root=None, scope=None, cache=None):
     return '\n'.join(lines[start:end]).strip()
 
 
-def render(cfg, name, root=None, display_root=None, scope=None, cache=None, seen=None):
-    scope = scope or PhysicalPath(ROOT if root is None else root)
+def render(cfg, name, root=None, display_root=None, scope=None, seen=None):
+    """Render one topic. With seen, omit exact sources an earlier topic already printed."""
     out, current = [], set()
     for s in cfg['topics'][name]['sources']:
         where = s['path']
@@ -441,16 +429,13 @@ def render(cfg, name, root=None, display_root=None, scope=None, cache=None, seen
             where = os.path.relpath(os.path.join(ROOT if root is None else root,
                                                where.replace('\\', '/')), display_root).replace(os.sep, '/')
         where += f' § {s["heading"]}' if 'heading' in s else ''
-        body = section(s, root=root, scope=scope, cache=cache)
-        # Exact configured sources only, never whole-file/section overlap,
-        # identical text in another file, or paths with different markers.
-        if seen is None:
+        body = section(s, root=root, scope=scope)  # validate even when omitted
+        # Same owner root and identical source entry only: overlapping sections,
+        # other path spellings and repeats inside one topic are kept.
+        key = (ROOT if root is None else root, json.dumps(s, sort_keys=True))
+        current.add(key)
+        if seen is None or key not in seen:
             out.append(f'<!-- {where} -->\n{body}')
-        else:
-            key = (scope.path, json.dumps(s, sort_keys=True), body)
-            if key not in seen:
-                out.append(f'<!-- {where} -->\n{body}')
-            current.add(key)
     if seen is not None:
         seen.update(current)
     return '\n\n'.join(out)
@@ -1313,8 +1298,7 @@ def main(argv):
             failed += check(mounted, root=entry.root, namespace=entry.name + '/', summary=False)
         print(f'{failed} root(s) failed' if failed else 'ok')
         return int(bool(failed))
-    # Preserve a pre-existing topic literally named --dedupe, including when
-    # it is requested with other topics. Single-topic output stays unchanged.
+    # A local topic literally named --dedupe keeps priority over the option.
     dedupe = args[0] == '--dedupe' and '--dedupe' not in cfg['topics']
     if dedupe:
         args = args[1:]
@@ -1339,14 +1323,12 @@ def main(argv):
         except (OSError, ValueError) as error:
             print(f'{diagnostic(requested)}: {diagnostic(error)}', file=sys.stderr)
             return 1
-    bodies = []
-    cache, seen = ({}, set()) if dedupe and len(selected) > 1 else (None, None)
+    bodies, seen = [], set() if dedupe else None
     for requested, owner_cfg, topic, owner_root in selected:
         try:
             body = render(owner_cfg, topic, root=owner_root,
-                          display_root=ROOT if owner_root is not None else None,
-                          cache=cache, seen=seen)
-            if body or seen is None:
+                          display_root=ROOT if owner_root is not None else None, seen=seen)
+            if body or not dedupe:
                 bodies.append(body)
         except (OSError, ValueError) as error:
             print(f'{diagnostic(requested)}: {diagnostic(error)}', file=sys.stderr)

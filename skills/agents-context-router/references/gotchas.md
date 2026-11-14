@@ -6,7 +6,7 @@ Each item below is a trap that makes a split lose content or route agents to the
 
 1. **Keep "every task" and "important" apart.** The kernel test is whether an agent would do something wrong on an unrelated task without this line. Important but task-specific text, like the whole debugging runbook, belongs in a topic. The kernel keeps only the one-line trigger: "if every job fails the same way, suspect our code; load `debugging`". Without the trigger, the agent never loads the topic.
 
-2. **Put lessons in the kernel as behaviour, not as story.** When a user corrects the agent ("it wasn't the site, our code was broken"), turn that into a one-line rule. The incident write-up goes to history.
+2. **Promote lessons selectively, not automatically.** Keep task-specific lessons and procedures in their topic. Only a lesson needed on every task becomes a one-line kernel rule; importance alone is not enough. The incident write-up goes to history, with evidence preserved.
 
 3. **Move verbatim first, edit second.** Rewriting while moving is how paragraphs vanish. Move whole sections into the history and topic pages in the original language. Then prune duplicates in a separate pass, and compare total bytes against the backup at the end.
 
@@ -56,7 +56,7 @@ Each item below is a trap that makes a split lose content or route agents to the
     - orphan checks;
     - `check` in CI.
 
-    Any part missing and the docs drift back.
+    Any part missing and the docs drift back. These checks catch structure, not truth: review changed claims against raw sources and tests. Code is evidence of behavior, not authority to weaken a safety rule or intended requirement.
 
 21. **An orphan is drift you cannot see.** A new wiki page that no topic loads, or a new history file missing from the index, is invisible to agents but looks fine to humans. `check` fails on both, and on a nested `AGENTS.md` that no topic loads. Real exceptions, including scoped instructions agents load by cwd, go under `"unrouted"` with a reason. Keys accept exact paths or case-sensitive fnmatch globs; backslashes normalize to `/`. `projects/*/AGENTS.md` also matches deeper paths because `*` crosses `/`; `**` has no special recursive meaning. Keys match themselves and also act as patterns, regardless of file existence: `wiki/file[1].md` exempts both itself and `wiki/file1.md`. Use `wiki/file[[]1].md` to exempt the literal bracketed filename without also exempting `wiki/file1.md`. Keep patterns narrow: unmatched files must still fail.
 

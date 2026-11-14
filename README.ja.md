@@ -144,6 +144,8 @@ python3 scripts/ai-context.py check
 
 `list` は利用できるトピックを表示します。トピック名を指定すると、対応するセクションだけを元ファイルのパス付きで表示します。`check` はルーターと設定された上限を検証します。
 
+`check` が検証するのは構造であり、事実の正確さやポリシーへの適合ではありません。特定タスクの教訓は topic に置き、すべてのタスクで必要な規則だけを kernel に含めます。生成される保守マニュアルでは、根拠と状態の記録、元資料の確認、変更した記述に絞ったレビューを説明します。
+
 リポジトリ内に `scripts/` ディレクトリを置かず、リポジトリ外にインストールした 1 つのスクリプトを使うこともできます。
 
 ```bash
@@ -159,7 +161,7 @@ AI_CONTEXT_ROOT=/work/repo AI_CONTEXT_CONFIG=/work/settings/router.json \
 
 生成物や証跡のダンプなど、指示を含まない大きなツリーは `"skipDirs": ["projects/*/artifacts"]`（デフォルト `[]`）で `check` の走査対象から外せます。各要素はリポジトリ相対のディレクトリの完全一致パス、または大文字と小文字を区別する fnmatch の glob で、`"unrouted"` のキーと同じように照合されます（`*` は `/` をまたぎます）。一致したディレクトリには `check` が入らないため、トピックのソースや明示したルーター索引でない限り、その中のページは孤立、indexed、リンクの検査対象になりません。各所有ルートの wiki は走査されますが、マウントのツリーは外側の走査から除外され、独自に検査されます。
 
-`python3 scripts/ai-context.py --dedupe <topic> <topic>`: [opt-in exact-source reuse and its limits](README.md#combining-topics-without-repeating-exact-sources). Default and single-topic output, source markers, and independent `check` budgets are unchanged.
+複数のトピックを一度に読み込むときは、`python3 scripts/ai-context.py --dedupe <topic> <topic>` で完全に同一のソースを 1 回だけ出力できます。最初に現れた位置とソースのマーカーは維持されます。通常の出力、単一トピックの出力、`check` によるトピックごとの上限は変わりません。詳細と制限は[英語版の説明](README.md#combining-topics-without-repeating-exact-sources)を参照してください。
 
 ## 既存のルーターツリー
 
@@ -199,6 +201,8 @@ wiki/README.md            人向けのトピック・履歴一覧
 ```
 
 同梱スクリプトは Python 標準ライブラリのみを使います（Python 3.8 以降）。例では `python3` を使っています。Windows では `python` または `py -3` を使ってください。スキルがルーターの導入時に適切なコマンドを選びます。正確な見出しを参照し、見出しがない場合や重複している場合は失敗するため、名前変更後に誤った指示が読み込まれることはありません。
+
+見出しを指定したソースに `"frontmatter": true` を設定すると、先頭の閉じたフロントマター（`---` から `---` または `...` まで）を除外します。YAML の妥当性は検証しません。省略または `false` なら従来の見出し処理を保ちます。ページ全体の読み込みでは保持し、閉じる区切りがなければ従来の Markdown 処理を保ちます。正確な境界規則は保守ガイドを参照してください。OKF 検証やメタデータの追加表示は行いません。
 
 ## コントリビュート
 

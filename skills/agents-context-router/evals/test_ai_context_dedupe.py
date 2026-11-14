@@ -84,38 +84,7 @@ class DedupeTests(mounts.MountFixture):
         self.assertEqual(self.cli('--dedupe').stdout, self.cli('guide').stdout)
         self.assertEqual(self.cli('--dedupe', 'guide').stdout, self.cli('guide', 'guide').stdout)
 
-    def test_file_and_heading_reads_reused_but_not_across_invocations(self):
-        self.pair([{'path': 'wiki/guide.md', 'heading': 'Guide'}])
-        self.cfg['topics']['guide']['sources'][0]['heading'] = 'Guide'
-        self.save_configs()
-        with patch.object(router, 'read_text', wraps=router.read_text) as read, \
-                patch.object(router, 'headings', wraps=router.headings) as headings:
-            self.assertEqual(self.call_main('--dedupe', 'guide', 'second')[0], 0)
-            source_reads = [call for call in read.call_args_list
-                            if call.args[0] == str(self.root / 'wiki/guide.md')]
-            self.assertEqual(len(source_reads), 1)
-            self.assertEqual(headings.call_count, 1)
-            self.write('wiki/guide.md', '# Guide\nFresh.\n')
-            self.assertIn('Fresh.', self.call_main('--dedupe', 'guide', 'second')[1])
-            source_reads = [call for call in read.call_args_list
-                            if call.args[0] == str(self.root / 'wiki/guide.md')]
-            self.assertEqual(len(source_reads), 2)
-
-    def test_changed_source_invalidates_cache_and_is_not_dropped(self):
-        self.pair()
-        real_section, calls = router.section, []
-        def change(*args, **kwargs):
-            calls.append(1)
-            if len(calls) == 2:
-                self.write('wiki/guide.md', '# Guide\nNew longer contents.\n')
-            return real_section(*args, **kwargs)
-        with patch.object(router, 'section', side_effect=change):
-            code, out, err = self.call_main('--dedupe', 'guide', 'second')
-        self.assertEqual((code, err), (0, ''))
-        self.assertIn('Local.', out)
-        self.assertIn('New longer contents.', out)
-
-    def test_cached_reference_still_rejects_symlink_escape_and_directory(self):
+    def test_omitted_duplicate_still_rejects_symlink_escape_and_directory(self):
         self.pair()
         path = self.root / 'wiki/guide.md'
         outside = self.parent / 'outside.md'
@@ -152,35 +121,6 @@ class DedupeTests(mounts.MountFixture):
         self.assertIn('### Child\nKeep.', result.stdout)
         self.assertNotIn('Omit.', result.stdout)
 
-    def test_distinct_sections_share_only_document_and_heading_index(self):
-        self.write('wiki/guide.md', '# Guide\n## One\nFirst.\n## Two\nSecond.\n')
-        self.cfg['topics']['guide']['sources'] = [{'path': 'wiki/guide.md', 'heading': 'One'}]
-        self.pair([{'path': 'wiki/guide.md', 'heading': 'Two'}])
-        with patch.object(router, 'read_text', wraps=router.read_text) as read, \
-                patch.object(router, 'headings', wraps=router.headings) as headings:
-            code, out, err = self.call_main('--dedupe', 'guide', 'second')
-        self.assertEqual((code, err), (0, ''))
-        self.assertEqual(out, self.cli('guide', 'second').stdout)
-        self.assertEqual(len([c for c in read.call_args_list
-                             if c.args[0] == str(self.root / 'wiki/guide.md')]), 1)
-        self.assertEqual(headings.call_count, 1)
-
-    def test_read_changed_during_read_is_not_cached(self):
-        self.pair()
-        path, real_read, calls = str(self.root / 'wiki/guide.md'), router.read_text, []
-        def change(source, *args, **kwargs):
-            result = real_read(source, *args, **kwargs)
-            if source == path:
-                calls.append(1)
-                if len(calls) == 1:
-                    self.write('wiki/guide.md', '# Guide\nChanged during read.\n')
-            return result
-        with patch.object(router, 'read_text', side_effect=change):
-            code, out, err = self.call_main('--dedupe', 'guide', 'second')
-        self.assertEqual((code, err, len(calls)), (0, '', 2))
-        self.assertIn('Local.', out)
-        self.assertIn('Changed during read.', out)
-
     def test_invalid_encoding_late_in_request_is_atomic(self):
         self.pair([{'path': 'wiki/bad.md'}])
         (self.root / 'wiki/bad.md').write_bytes(b'\xff')
@@ -201,9 +141,7 @@ class DedupeTests(mounts.MountFixture):
     def test_distinct_source_options_are_not_silently_deduplicated(self):
         self.cfg['topics']['guide']['sources'][0]['heading'] = 'Guide'
         self.pair([{'path': 'wiki/guide.md', 'heading': 'Guide', 'frontmatter': True}])
-        with patch.object(router, 'headings', wraps=router.headings) as headings:
-            code, out, err = self.call_main('--dedupe', 'guide', 'second')
-        self.assertEqual((code, err), (0, ''))
-        self.assertEqual(out, self.cli('guide', 'second').stdout)
-        self.assertEqual(out.count('<!-- wiki/guide.md § Guide -->'), 2)
-        self.assertEqual(headings.call_count, 2)
+        result = self.cli('--dedupe', 'guide', 'second')
+        self.assertEqual((result.returncode, result.stderr), (0, ''))
+        self.assertEqual(result.stdout, self.cli('guide', 'second').stdout)
+        self.assertEqual(result.stdout.count('<!-- wiki/guide.md § Guide -->'), 2)
