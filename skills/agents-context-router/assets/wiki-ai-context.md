@@ -36,7 +36,7 @@ To consume an independent router tree already inside the project, add this optio
 
 The tree must already have its own config with a `topics` object, string descriptions and source lists, plus its own instructions and router index.
 
-Each topic's `sources` is a list of objects with a nonempty `path` and optional string `heading` and boolean `frontmatter` (default `false`). Optional path settings are nonempty strings, `indexed`/`skipDirs` are string lists, and `unrouted` is an object. Root/default/per-topic byte caps are nonnegative integers, excluding booleans. Ordinary unknown config fields remain accepted; unknown declaration fields do not.
+Each topic's `sources` is a list of objects with a nonempty `path` and optional string `heading` and booleans `frontmatter`, `stripFrontmatter` (default `false`). Optional path settings are nonempty strings, `indexed`/`skipDirs` are string lists, and `unrouted` is an object. Root/default/per-topic byte caps are nonnegative integers, excluding booleans. Ordinary unknown config fields remain accepted; unknown declaration fields do not.
 
 Select it through the project router:
 
@@ -105,7 +105,7 @@ After a change, render the affected topics and review their claims against those
 3. Add a row to this root's local topic tables in `AGENTS.md` and `wiki/README.md`; mounted topics belong to their owner's tables.
 4. Run `python3 scripts/ai-context.py check`, then render the topic and read it as an agent would.
 
-For a heading source, `"frontmatter": true` skips a closed leading envelope; default/false keeps legacy behavior. First line must be `---` (optional BOM); closure is column-zero `---` or `...`. Trailing spaces/tabs are allowed. No YAML validation occurs. No closer means legacy headings. Whole-file output stays unchanged; sections add no metadata.
+For a heading source, `"frontmatter": true` skips a closed leading envelope; default/false keeps legacy behavior. First line must be `---` (optional BOM); closure is column-zero `---` or `...`. Trailing spaces/tabs are allowed. No YAML validation occurs. No closer means legacy headings. Whole-file output is unchanged unless `stripFrontmatter` (source, or top-level default; source wins) is true: it drops a closed leading envelope from output and budgets and makes headings frontmatter-aware. Sections add no metadata.
 
 ## What check enforces
 
