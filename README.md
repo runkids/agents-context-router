@@ -219,6 +219,8 @@ The bundled script uses only the Python standard library (Python 3.8+). Examples
 
 Set `"frontmatter": true` on a heading-selected source to ignore closed opening frontmatter (`---` through `---` or `...`), without validating YAML. Omitted/false preserves existing heading behavior. Whole-page sources retain it; an unclosed opening delimiter keeps legacy Markdown behavior. The maintenance manual documents the exact boundary rules. This is not an OKF validator or metadata renderer.
 
+To keep page metadata out of printed context and byte budgets, set `"stripFrontmatter": true` on a source, or once at the top level of the config as the default for every source (a source value wins). A closed opening envelope is then dropped from whole-page output, and heading sources skip it as `"frontmatter": true` does. Omitted/false changes nothing; an unclosed envelope stays in place. `check` budgets the stripped output.
+
 ## Contributing
 
 Issues and pull requests are welcome. The skill workflow and eval prompts are in [`skills/agents-context-router/`](skills/agents-context-router/).

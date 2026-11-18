@@ -204,6 +204,8 @@ wiki/README.md            사람이 읽는 topic 및 기록 목록
 
 제목을 지정한 소스에 `"frontmatter": true`를 설정하면 문서 시작의 닫힌 frontmatter(`---`부터 `---` 또는 `...`까지)를 건너뛰며 YAML 유효성을 검사하지 않습니다.생략하거나 `false`이면 기존 제목 동작을 유지합니다. 전체 페이지 소스는 이를 유지하고, 닫는 구분자가 없으면 기존 Markdown 동작을 유지합니다. 정확한 경계 규칙은 관리 가이드를 참고하세요. OKF 검증이나 메타데이터 추가 출력 기능은 아닙니다.
 
+페이지 메타데이터를 출력과 바이트 예산에서 빼려면 소스에 `"stripFrontmatter": true`를 설정하거나, 설정 파일 최상위에 한 번 지정해 모든 소스의 기본값으로 쓰세요(소스 값이 우선). 전체 페이지 소스에서는 문서 시작의 닫힌 frontmatter를 출력에서 제거하고, 제목 소스에서는 `"frontmatter": true`처럼 이를 건너뜁니다. 생략하거나 `false`이면 아무것도 바뀌지 않으며, 닫히지 않은 frontmatter는 그대로 남습니다. `check`는 제거된 출력으로 바이트를 계산합니다.
+
 ## 기여
 
 Issue와 Pull Request를 환영합니다. 스킬 절차와 eval 프롬프트는 [`skills/agents-context-router/`](skills/agents-context-router/)에 있습니다.

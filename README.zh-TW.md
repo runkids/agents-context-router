@@ -204,6 +204,8 @@ wiki/README.md            給人看的 topic 與歷史索引
 
 在指定標題的來源上設定 `"frontmatter": true`，標題選取才會略過文件開頭已閉合的 frontmatter（從 `---` 到 `---` 或 `...`），但不驗證 YAML 是否有效。省略或設為 `false` 時保留原有標題行為。整頁來源保留該內容；沒有閉合分隔符時保留原有 Markdown 行為。精確邊界規則見維護指南。這不是 OKF 驗證器，也不會額外輸出中繼資料。
 
+若要讓頁面中繼資料不進入輸出和位元組預算，可在來源上設定 `"stripFrontmatter": true`，或在設定檔頂層設定一次，作為所有來源的預設值（來源上的值優先）。整頁來源會從輸出中移除開頭已閉合的 frontmatter，指定標題的來源則像 `"frontmatter": true` 一樣略過它。省略或設為 `false` 時不做任何改變；未閉合的 frontmatter 保持原樣。`check` 依移除後的輸出計算位元組數。
+
 ## 參與貢獻
 
 歡迎提出 Issue 和 Pull Request。Skill 工作流程和 eval prompts 位於 [`skills/agents-context-router/`](skills/agents-context-router/)。
