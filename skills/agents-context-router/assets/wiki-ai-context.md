@@ -1,6 +1,6 @@
 # AI Context Router
 
-This page is the in-repo manual for keeping the agent docs routed and true. It works without any skill installed. Load it with `python3 scripts/ai-context.py ai-context`.
+This page is the in-repo manual for keeping the agent docs routed and true. Load it with `python3 scripts/ai-context.py ai-context`.
 
 Run `python3 scripts/ai-context.py --version` to identify the copied router's source release; no config is required. Updating the skill does not update this copy. Compare local customizations before replacing the script, and retain the repo's config and docs.
 
@@ -106,6 +106,8 @@ After a change, render the affected topics and review their claims against those
 4. Run `python3 scripts/ai-context.py check`, then render the topic and read it as an agent would.
 
 For a heading source, `"frontmatter": true` skips a closed leading envelope; default/false keeps legacy behavior. First line must be `---` (optional BOM); closure is column-zero `---` or `...`. Trailing spaces/tabs are allowed. No YAML validation occurs. No closer means legacy headings. Whole-file output is unchanged unless `stripFrontmatter` (source, or top-level default; source wins) is true: it drops a closed leading envelope from output and budgets and makes headings frontmatter-aware. Sections add no metadata. Detection reads delimiters only: a page starting `---`, `Intro`, `---` (a rule, then a setext heading) loses `Intro`. Under a top-level default, give such a page `"stripFrontmatter": false`.
+
+Top-level `"compactPathLinks": true` prints a plain link whose text is its target's root-relative path, like `[docs/run.md](../docs/run.md)`, as `` `docs/run.md` `` in output and budgets; `check` still validates it.
 
 ## What check enforces
 
