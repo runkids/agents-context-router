@@ -110,14 +110,16 @@ class StripFrontmatterTests(unittest.TestCase):
         self.assertOut(self.guide(text), '<!-- wiki/guide.md § Title -->\n# Title\nBody.\n')
 
     def test_option_must_be_a_boolean(self):
-        for source, top in (({'stripFrontmatter': 'yes'}, None), (None, 1)):
+        for source, top, message in (
+                ({'stripFrontmatter': 'yes'}, None, 'wiki/guide.md: stripFrontmatter: expected a boolean'),
+                (None, 1, 'guide: stripFrontmatter: expected a boolean')):
             with self.subTest(source=source, top=top):
                 self.cfg = {'topics': {'guide': {'description': 'Guide', 'sources': [
                     {'path': 'wiki/guide.md'}]}}}
                 self.configure(source, top)
                 result = self.guide('Body.\n')
                 self.assertEqual(result.returncode, 1)
-                self.assertIn('stripFrontmatter: expected a boolean', result.stderr)
+                self.assertIn(message, result.stderr)
 
     def test_budget_counts_printed_bytes_and_check_agrees(self):
         body = 'x' * 200 + '\n'

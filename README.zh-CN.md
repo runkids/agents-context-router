@@ -204,6 +204,8 @@ wiki/README.md            面向人的 topic 与历史索引
 
 在指定标题的来源上设置 `"frontmatter": true`，标题选择才会跳过文档开头已闭合的 frontmatter（从 `---` 到 `---` 或 `...`），但不验证 YAML 是否有效。省略或设为 `false` 时保留原有标题行为。整页来源保留该内容；没有闭合分隔符时保留原有 Markdown 行为。精确边界规则见维护指南。这不是 OKF 验证器，也不会额外输出元数据。
 
+若要让页面元数据不进入输出和字节预算，可在来源上设置 `"stripFrontmatter": true`，或在配置顶层设置一次，作为所有来源的默认值（来源上的值优先）。整页来源会从输出中去掉开头已闭合的 frontmatter，指定标题的来源则像 `"frontmatter": true` 一样跳过它。省略或设为 `false` 时不做任何改变；未闭合的 frontmatter 保持原样。`check` 按去除后的输出计算字节数。
+
 ## 参与贡献
 
 欢迎提交 Issue 和 Pull Request。Skill 工作流程和 eval 提示词位于 [`skills/agents-context-router/`](skills/agents-context-router/)。

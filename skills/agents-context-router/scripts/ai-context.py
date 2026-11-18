@@ -411,7 +411,8 @@ def section(src, root=None, scope=None, strip_default=False):
         raise ValueError(f'{src["path"]}: frontmatter: expected a boolean')
     strip = src.get('stripFrontmatter', strip_default)
     if not isinstance(strip, bool):
-        raise ValueError(f'{src["path"]}: stripFrontmatter: expected a boolean')
+        where = f'{src["path"]}: ' if 'stripFrontmatter' in src else ''
+        raise ValueError(f'{where}stripFrontmatter: expected a boolean')
     frontmatter = frontmatter or strip
     path = os.path.realpath(os.path.join(root, src['path'].replace('\\', '/')))
     if not inside_root(path, scope):
