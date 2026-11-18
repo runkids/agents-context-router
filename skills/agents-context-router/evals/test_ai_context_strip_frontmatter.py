@@ -112,7 +112,7 @@ class StripFrontmatterTests(unittest.TestCase):
     def test_option_must_be_a_boolean(self):
         for source, top, message in (
                 ({'stripFrontmatter': 'yes'}, None, 'wiki/guide.md: stripFrontmatter: expected a boolean'),
-                (None, 1, 'guide: stripFrontmatter: expected a boolean')):
+                (None, 1, 'FAIL stripFrontmatter: expected a boolean')):
             with self.subTest(source=source, top=top):
                 self.cfg = {'topics': {'guide': {'description': 'Guide', 'sources': [
                     {'path': 'wiki/guide.md'}]}}}
@@ -120,6 +120,16 @@ class StripFrontmatterTests(unittest.TestCase):
                 result = self.guide('Body.\n')
                 self.assertEqual(result.returncode, 1)
                 self.assertIn(message, result.stderr)
+
+    def test_bad_config_default_fails_even_when_every_source_sets_its_own(self):
+        self.configure({'stripFrontmatter': False}, 'yes')
+        write_fixture(self.root, 'wiki/guide.md', 'Body.\n')
+        for args, stream in ((('check',), 'stdout'), (('guide',), 'stderr'), (('list',), 'stderr')):
+            with self.subTest(args=args):
+                result = run_router(self.script, *args)
+                self.assertEqual(result.returncode, 1)
+                # Reported once as a config key, not against a topic.
+                self.assertEqual(getattr(result, stream), 'FAIL stripFrontmatter: expected a boolean\n')
 
     def test_budget_counts_printed_bytes_and_check_agrees(self):
         body = 'x' * 200 + '\n'

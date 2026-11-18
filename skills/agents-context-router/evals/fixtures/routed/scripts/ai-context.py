@@ -1271,6 +1271,10 @@ def main(argv):
         return 0
     cfg = load_cfg()
     try:
+        # Validate the config-wide default up front, as mounted configs are, so a bad
+        # value fails even when every source sets its own.
+        if not isinstance(cfg.get('stripFrontmatter', False), bool):
+            raise ValueError('stripFrontmatter: expected a boolean')
         entries = mount_entries(cfg)
     except ValueError as error:
         print(f'FAIL {diagnostic(error)}', file=sys.stdout if args == ['check'] else sys.stderr)
