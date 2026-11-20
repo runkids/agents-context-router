@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+<defs>
+  <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#19243d"/><stop offset="1" stop-color="#283755"/></linearGradient>
+</defs>
+<rect width="1024" height="1024" fill="url(#sky)"/>
+<g fill="#dce5ff" opacity=".5"><circle cx="120" cy="140" r="7"/><circle cx="905" cy="118" r="6"/><circle cx="140" cy="890" r="6"/><circle cx="880" cy="905" r="7"/></g>
+<!-- topics: only the middle one is loaded -->
+<g opacity=".3">
+  <rect x="640" y="236" width="290" height="140" rx="30" fill="#fffdf8"/>
+  <rect x="640" y="648" width="290" height="140" rx="30" fill="#fffdf8"/>
+</g>
+<g stroke="#5f6f88" stroke-width="18" stroke-linecap="round" opacity=".55">
+  <path d="M684 290h190M684 326h130"/>
+  <path d="M684 702h190M684 738h130"/>
+</g>
+<rect x="640" y="430" width="290" height="164" rx="32" fill="#e6efe9" stroke="#a9c6b3" stroke-width="8"/>
+<path d="M686 488h196M686 536h140" stroke="#8aa293" stroke-width="22" stroke-linecap="round"/>
+<!-- route from the star to the loaded topic -->
+<path d="M548 512h56" fill="none" stroke="#8ca1bb" stroke-width="14" stroke-dasharray="18 22" stroke-linecap="round"/>
+<!-- the router star -->
+<g transform="translate(330 512) scale(3.9)">
+  <path d="M0-55l13 26 29-9-13 27 22 20-30 3-9 29-14-26-29 9 12-27-22-20 30-3z" fill="#f3d98d" stroke="#f3d98d" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M-12-4q5-6 10 0M6-4q5-6 10 0" fill="none" stroke="#5c5260" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M-4 9q6 6 12 0" fill="none" stroke="#5c5260" stroke-width="2.6" stroke-linecap="round"/>
+  <circle cx="-17" cy="6" r="3.4" fill="#e8a29b" opacity=".85"/><circle cx="21" cy="6" r="3.4" fill="#e8a29b" opacity=".85"/>
+</g>
+</svg>
