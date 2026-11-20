@@ -1,6 +1,6 @@
 {
   "name": "agents-context-router",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Route coding agents to only the repository context each task needs.",
   "license": "MIT",
   "repository": "https://github.com/runkids/agents-context-router",
