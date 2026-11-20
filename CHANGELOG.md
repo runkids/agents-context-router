@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/runkids/agents-context-router/compare/v0.4.0...v0.5.0) (2026-11-20)
+
+
+### Features
+
+* opt in to printing self-named path links once ([#22](https://github.com/runkids/agents-context-router/issues/22)) ([e44a3e8](https://github.com/runkids/agents-context-router/commit/e44a3e8593b3a8966c76a37f791a69f46ec30729)), closes [#21](https://github.com/runkids/agents-context-router/issues/21)
+* opt in to stripping frontmatter from printed sources ([#20](https://github.com/runkids/agents-context-router/issues/20)) ([0c5fdc7](https://github.com/runkids/agents-context-router/commit/0c5fdc771b00c82ff090ab932ce311ab49855f85))
+
 ## [0.4.0](https://github.com/runkids/agents-context-router/compare/v0.3.0...v0.4.0) (2026-11-14)
 
 
