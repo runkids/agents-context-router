@@ -206,6 +206,8 @@ wiki/README.md            사람이 읽는 topic 및 기록 목록
 
 페이지 메타데이터를 출력과 바이트 예산에서 빼려면 소스에 `"stripFrontmatter": true`를 설정하거나, 설정 파일 최상위에 한 번 지정해 모든 소스의 기본값으로 쓰세요(소스 값이 우선). 전체 페이지 소스에서는 문서 시작의 닫힌 frontmatter를 출력에서 제거하고, 제목 소스에서는 `"frontmatter": true`처럼 이를 건너뜁니다. 생략하거나 `false`이면 아무것도 바뀌지 않으며, 닫히지 않은 frontmatter는 그대로 남습니다. `check`는 제거된 출력으로 바이트를 계산합니다.
 
+토픽 페이지가 루트 기준 경로를 텍스트로 쓴 링크(`[docs/run.md](../docs/run.md)` 등)로 경로를 나열한다면, 설정 파일 최상위에 `"compactPathLinks": true`를 두어 각 링크를 `` `docs/run.md` ``처럼 한 번만 출력할 수 있습니다. 파서가 링크로 읽는 단순 상대 경로만 바뀌고, 다른 링크와 코드, 페이지 자체는 그대로입니다. `check`는 모든 링크를 계속 검증하고 줄어든 출력으로 바이트 예산을 셉니다. 기본값은 `false`입니다. 마운트된 토픽의 출력되는 축약 경로는 바깥쪽 루트를 기준으로 하지만, 마운트의 예산은 각 마운트 고유의 경로로 계산합니다.
+
 ## 기여
 
 Issue와 Pull Request를 환영합니다. 스킬 절차와 eval 프롬프트는 [`skills/agents-context-router/`](skills/agents-context-router/)에 있습니다.

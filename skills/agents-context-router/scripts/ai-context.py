@@ -31,7 +31,7 @@ the invocation cwd independently; relative paths inside the config resolve from 
 Empty or unset overrides use the defaults.
 No dependencies beyond the Python 3.8+ standard library.
 """
-import fnmatch, json, os, re, stat, sys, unicodedata
+import fnmatch, json, os, posixpath, re, stat, sys, unicodedata
 from collections import namedtuple
 from urllib.parse import unquote
 from html import unescape
@@ -285,6 +285,12 @@ def mount_entries(cfg, root=None):
     return [entry._replace(error=errors[index]) for index, entry in enumerate(entries)]
 
 
+def validate_defaults(cfg):
+    for field in ('stripFrontmatter', 'compactPathLinks'):
+        if not isinstance(cfg.get(field, False), bool):
+            raise ValueError(f'{field}: expected a boolean')
+
+
 def validate_mounted_cfg(cfg, root):
     """Validate only shapes used by this router; leave legacy outer configs alone."""
     if not isinstance(cfg, dict):
@@ -341,8 +347,7 @@ def validate_mounted_cfg(cfg, root):
                 raise ValueError(f'{field}.sources.frontmatter: expected a boolean')
             if 'stripFrontmatter' in source and not isinstance(source['stripFrontmatter'], bool):
                 raise ValueError(f'{field}.sources.stripFrontmatter: expected a boolean')
-    if 'stripFrontmatter' in cfg and not isinstance(cfg['stripFrontmatter'], bool):
-        raise ValueError('stripFrontmatter: expected a boolean')
+    validate_defaults(cfg)
 
 
 def load_mount(entry):
@@ -431,6 +436,50 @@ def section(src, root=None, scope=None, strip_default=False):
     return '\n'.join(lines[start:end]).strip()
 
 
+# A plain relative path: no spaces, escapes, entities, percent-encoding or code
+# markers, so the text is the path it names.
+PATH_LINK = re.compile(r'\[([A-Za-z0-9._~/+-]+)\]\(([A-Za-z0-9._~/+-]+)\)')
+
+
+# Links resolve from the configured source path, not a symlink's target, as link_problems does.
+def compact_path_links(body, source, root=None, display_root=None):
+    """Print parser-recognized plain path links as their root-relative paths."""
+    owner = ROOT if root is None else root
+    base = owner_relative(os.path.dirname(os.path.abspath(os.path.join(owner, source.replace('\\', '/')))),
+                          owner).replace(os.sep, '/')
+    lines = body.split('\n')
+    # The block scanner expands tabs in container prefixes before computing spans.
+    offsets, original, expanded = [], 0, 0
+    for line in lines:
+        lead = line[:CONTAINER_LEAD.match(line).end()]
+        width = len(lead.expandtabs(4)) - len(lead)
+        offsets.append(original - expanded - width)
+        original += len(line) + 1
+        expanded += len(line) + width + 1
+    pieces, last = [], 0
+    for number, _, start, end in link_destinations(lines, spans=True):
+        start, end = start + offsets[number - 1], end + offsets[number - 1]
+        match = PATH_LINK.fullmatch(body[start:end])
+        if not match:
+            continue
+        path, dest = match.groups()
+        if (path.startswith('/') or
+                posixpath.normpath(path) != posixpath.normpath(posixpath.join(base, dest))):
+            continue
+        path = posixpath.normpath(path)
+        if display_root is not None:
+            path = os.path.relpath(os.path.join(owner, path), display_root).replace(os.sep, '/')
+        if '`' in path:
+            continue  # A mount directory name with a backtick cannot print as a plain code span.
+        pieces.append(body[last:start])
+        if ''.join(pieces[-2:]).endswith('`'):
+            pieces.append('<!-- -->')  # Keep adjacent code delimiters distinct.
+        pieces.append(f'`{path}`' + '<!-- -->' * (body[end:end + 1] == '`'))
+        last = end
+    pieces.append(body[last:])
+    return ''.join(pieces)
+
+
 def render(cfg, name, root=None, display_root=None, scope=None, seen=None):
     """Render one topic. With seen, omit exact sources an earlier topic already printed."""
     out, current = [], set()
@@ -442,6 +491,8 @@ def render(cfg, name, root=None, display_root=None, scope=None, seen=None):
         where += f' § {s["heading"]}' if 'heading' in s else ''
         body = section(s, root=root, scope=scope,
                        strip_default=cfg.get('stripFrontmatter', False))  # validate even when omitted
+        if cfg.get('compactPathLinks', False):
+            body = compact_path_links(body, s['path'], root=root, display_root=display_root)
         # Same owner root and identical source entry only: overlapping sections,
         # other path spellings and repeats inside one topic are kept.
         key = (ROOT if root is None else root, json.dumps(s, sort_keys=True))
@@ -1018,7 +1069,7 @@ def markdown_text(lines):
     return '\n'.join(result), definitions, block_regions(result, eligible)
 
 
-def link_destinations(lines):
+def link_destinations(lines, spans=False):
     """Resolve inline syntax once, in source order, inside eligible blocks."""
     text, collected, regions = markdown_text(lines)
     normalize = lambda value: re.sub(r'[ \t\r\n]+', ' ', value.strip(' \t\r\n')).casefold()
@@ -1078,11 +1129,15 @@ def link_destinations(lines):
                         if reference is not None:
                             used.add(reference)
                         else:
-                            yield source_line, target
+                            if spans:
+                                if not image and not any(item[2] for item in stack):
+                                    yield source_line, target, opening, stop
+                            else:
+                                yield source_line, target
             line += text.count('\n', pos, stop)
             pos = stop
     for name, value in definitions.items():
-        if name in used:
+        if not spans and name in used:
             yield value
 
 
@@ -1273,8 +1328,7 @@ def main(argv):
     try:
         # Validate the config-wide default up front, as mounted configs are, so a bad
         # value fails even when every source sets its own.
-        if not isinstance(cfg.get('stripFrontmatter', False), bool):
-            raise ValueError('stripFrontmatter: expected a boolean')
+        validate_defaults(cfg)
         entries = mount_entries(cfg)
     except ValueError as error:
         print(f'FAIL {diagnostic(error)}', file=sys.stdout if args == ['check'] else sys.stderr)
