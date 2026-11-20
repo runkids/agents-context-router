@@ -221,7 +221,7 @@ Set `"frontmatter": true` on a heading-selected source to ignore closed opening 
 
 To keep page metadata out of printed context and byte budgets, set `"stripFrontmatter": true` on a source, or once at the top level of the config as the default for every source (a source value wins). A closed opening envelope is then dropped from whole-page output, and heading sources skip it as `"frontmatter": true` does. Omitted/false changes nothing; an unclosed envelope stays in place. `check` budgets the stripped output.
 
-If topic pages list paths as links whose text is the path from the root, such as `[docs/run.md](../docs/run.md)`, set `"compactPathLinks": true` at the top level of the config to print each one once, as `` `docs/run.md` ``. Only plain relative paths the parser reads as links change; other links, code and the pages themselves stay as they are. `check` still validates every link and budgets the compact output. Default false.
+If topic pages list paths as links whose text is the path from the root, such as `[docs/run.md](../docs/run.md)`, set `"compactPathLinks": true` at the top level of the config to print each one once, as `` `docs/run.md` ``. Only plain relative paths the parser reads as links change; other links, code and the pages themselves stay as they are. `check` still validates every link and budgets the compact output. Default false. For mounted topics, compact paths are relative to the outer root.
 
 ## Contributing
 

@@ -32,7 +32,7 @@ Empty or unset overrides use the defaults.
 No dependencies beyond the Python 3.8+ standard library.
 """
 import fnmatch, json, os, posixpath, re, stat, sys, unicodedata
-from collections import Counter, namedtuple
+from collections import namedtuple
 from urllib.parse import unquote
 from html import unescape
 from html.entities import html5
@@ -442,29 +442,38 @@ PATH_LINK = re.compile(r'(?<![!\\\[])\[([A-Za-z0-9._~/+-]+)\]\(([A-Za-z0-9._~/+-
 
 
 def compact_path_links(body, source, root=None, display_root=None):
-    """Print [path](target) as `path` when the root-relative text names the target."""
+    """Print parser-recognized plain path links as their root-relative paths."""
+    owner = ROOT if root is None else root
+    base = posixpath.dirname(os.path.relpath(os.path.join(owner, source.replace('\\', '/')),
+                                            owner).replace(os.sep, '/'))
     lines = body.split('\n')
-    links = Counter(link_destinations(lines))
-    base = posixpath.dirname(source.replace('\\', '/'))
-    def same(match):
-        text, dest = match.groups()
-        return (not text.startswith('/') and not dest.startswith('/')
-                and posixpath.normpath(text) == posixpath.normpath(posixpath.join(base, dest)))
-    def display(match):
-        path = match.group(1)
+    # The block scanner expands tabs in container prefixes before computing spans.
+    offsets, original, expanded = [], 0, 0
+    for line in lines:
+        lead = line[:CONTAINER_LEAD.match(line).end()]
+        width = len(lead.expandtabs(4)) - len(lead)
+        offsets.append(original - expanded - width)
+        original += len(line) + 1
+        expanded += len(line) + width + 1
+    pieces, last, previous = [], 0, None
+    for number, _, start, end in link_destinations(lines, spans=True):
+        start, end = start + offsets[number - 1], end + offsets[number - 1]
+        match = PATH_LINK.fullmatch(body[start:end])
+        if not match:
+            continue
+        path, dest = match.groups()
+        if (path.startswith('/') or dest.startswith('/') or
+                posixpath.normpath(path) != posixpath.normpath(posixpath.join(base, dest))):
+            continue
         if display_root is not None:
-            path = os.path.relpath(os.path.join(ROOT if root is None else root, path),
-                                   display_root).replace(os.sep, '/')
-        return f'`{path}`'
-    for number, line in enumerate(lines, 1):
-        # Rewrite a target only when the parser reads every `](target)` on the line as a
-        # link, so code spans, escapes and other non-links stay byte-for-byte.
-        targets = {m.group(2) for m in PATH_LINK.finditer(line) if same(m)}
-        safe = {d for d in targets if links[(number, d)] == line.count(f']({d})')}
-        if safe:
-            lines[number - 1] = PATH_LINK.sub(
-                lambda m: display(m) if m.group(2) in safe and same(m) else m.group(0), line)
-    return '\n'.join(lines)
+            path = os.path.relpath(os.path.join(owner, path), display_root).replace(os.sep, '/')
+        pieces.append(body[last:start])
+        if previous == start:
+            pieces.append('<!-- -->')  # Keep adjacent code delimiters distinct.
+        pieces.append(f'`{path}`')
+        last, previous = end, end
+    pieces.append(body[last:])
+    return ''.join(pieces)
 
 
 def render(cfg, name, root=None, display_root=None, scope=None, seen=None):
@@ -1056,7 +1065,7 @@ def markdown_text(lines):
     return '\n'.join(result), definitions, block_regions(result, eligible)
 
 
-def link_destinations(lines):
+def link_destinations(lines, spans=False):
     """Resolve inline syntax once, in source order, inside eligible blocks."""
     text, collected, regions = markdown_text(lines)
     normalize = lambda value: re.sub(r'[ \t\r\n]+', ' ', value.strip(' \t\r\n')).casefold()
@@ -1116,11 +1125,15 @@ def link_destinations(lines):
                         if reference is not None:
                             used.add(reference)
                         else:
-                            yield source_line, target
+                            if spans:
+                                if not image and source_line == line and not any(item[2] for item in stack):
+                                    yield source_line, target, opening, stop
+                            else:
+                                yield source_line, target
             line += text.count('\n', pos, stop)
             pos = stop
     for name, value in definitions.items():
-        if name in used:
+        if not spans and name in used:
             yield value
 
 

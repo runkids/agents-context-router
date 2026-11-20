@@ -70,10 +70,40 @@ class CompactPathLinksTests(unittest.TestCase):
                 '    [docs/run.md](../docs/run.md)\n')        # indented code
         self.assertOut(self.guide(kept), kept)
 
-    def test_a_code_span_on_the_line_keeps_the_whole_line(self):
+    def test_code_and_titled_links_do_not_interfere_with_neighbors(self):
         self.configure()
-        line = 'Write `[docs/run.md](../docs/run.md)` as [docs/run.md](../docs/run.md).\n'
-        self.assertOut(self.guide(line), line)
+        line = ('`[docs/run.md](../docs/run.md)` and [docs/run.md](../docs/run.md)\n'
+                '`[docs/run.md](../docs/run.md)` and [run](../docs/run.md "Run").\n')
+        expected = ('`[docs/run.md](../docs/run.md)` and `docs/run.md`\n'
+                    '`[docs/run.md](../docs/run.md)` and [run](../docs/run.md "Run").\n')
+        self.assertOut(self.guide(line), expected)
+
+    def test_adjacent_links_remain_separate_code_spans(self):
+        self.configure()
+        self.assertOut(self.guide('[docs/run.md](../docs/run.md)[docs/run.md](../docs/run.md)\n'),
+                       '`docs/run.md`<!-- -->`docs/run.md`\n')
+
+    def test_container_prefixes_and_nested_images_preserve_token_offsets(self):
+        self.configure()
+        line = ('> [docs/run.md](../docs/run.md)\n'
+                '- item\n  > [docs/run.md](../docs/run.md)\n'
+                '>\t[docs/run.md](../docs/run.md)\n'
+                '![outer [docs/run.md](../docs/run.md)](image.png)\n'
+                '[docs/run.md][ref]\n\n[ref]: ../docs/run.md\n')
+        expected = ('> `docs/run.md`\n'
+                    '- item\n  > `docs/run.md`\n'
+                    '>\t`docs/run.md`\n'
+                    '![outer [docs/run.md](../docs/run.md)](image.png)\n'
+                    '[docs/run.md][ref]\n\n[ref]: ../docs/run.md\n')
+        self.assertOut(self.guide(line), expected)
+
+    def test_absolute_source_compacts(self):
+        self.cfg['topics']['guide']['sources'][0]['path'] = str(self.root / 'wiki/guide.md')
+        self.configure()
+        result = self.guide(ROW)
+        self.assertEqual((result.returncode, result.stderr), (0, ''))
+        self.assertEqual(result.stdout, '<!-- ' + str(self.root / 'wiki/guide.md') +
+                         ' -->\n| Ship it | `docs/run.md` |\n')
 
     def test_heading_source_resolves_from_its_file(self):
         write_fixture(self.root, 'wiki/deep/run.md', 'Deep.\n')
@@ -108,7 +138,7 @@ class CompactPathLinksTests(unittest.TestCase):
         write_fixture(inner, 'wiki/guide.md', ROW)
         write_fixture(inner, 'wiki/ai-context.json', json.dumps(
             {'compactPathLinks': True, 'topics': {'guide': {'description': 'Inner', 'sources': [
-                {'path': 'wiki/guide.md'}]}}}))
+                {'path': str(inner / 'wiki/guide.md')}]}}}))
         self.cfg['mounts'] = {'kb': {'root': 'modules/kb'}}
         self.configure(None)
         result = self.guide(ROW, 'guide', 'kb/guide')
