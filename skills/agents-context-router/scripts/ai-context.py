@@ -285,6 +285,12 @@ def mount_entries(cfg, root=None):
     return [entry._replace(error=errors[index]) for index, entry in enumerate(entries)]
 
 
+def validate_defaults(cfg):
+    for field in ('stripFrontmatter', 'compactPathLinks'):
+        if not isinstance(cfg.get(field, False), bool):
+            raise ValueError(f'{field}: expected a boolean')
+
+
 def validate_mounted_cfg(cfg, root):
     """Validate only shapes used by this router; leave legacy outer configs alone."""
     if not isinstance(cfg, dict):
@@ -341,10 +347,7 @@ def validate_mounted_cfg(cfg, root):
                 raise ValueError(f'{field}.sources.frontmatter: expected a boolean')
             if 'stripFrontmatter' in source and not isinstance(source['stripFrontmatter'], bool):
                 raise ValueError(f'{field}.sources.stripFrontmatter: expected a boolean')
-    if 'stripFrontmatter' in cfg and not isinstance(cfg['stripFrontmatter'], bool):
-        raise ValueError('stripFrontmatter: expected a boolean')
-    if not isinstance(cfg.get('compactPathLinks', False), bool):
-        raise ValueError('compactPathLinks: expected a boolean')
+    validate_defaults(cfg)
 
 
 def load_mount(entry):
@@ -438,7 +441,7 @@ def section(src, root=None, scope=None, strip_default=False):
 PATH_LINK = re.compile(r'(?<![!\\\[])\[([A-Za-z0-9._~/+-]+)\]\(([A-Za-z0-9._~/+-]+)\)')
 
 
-def compact_path_links(body, source):
+def compact_path_links(body, source, root=None, display_root=None):
     """Print [path](target) as `path` when the root-relative text names the target."""
     lines = body.split('\n')
     links = Counter(link_destinations(lines))
@@ -447,6 +450,12 @@ def compact_path_links(body, source):
         text, dest = match.groups()
         return (not text.startswith('/') and not dest.startswith('/')
                 and posixpath.normpath(text) == posixpath.normpath(posixpath.join(base, dest)))
+    def display(match):
+        path = match.group(1)
+        if display_root is not None:
+            path = os.path.relpath(os.path.join(ROOT if root is None else root, path),
+                                   display_root).replace(os.sep, '/')
+        return f'`{path}`'
     for number, line in enumerate(lines, 1):
         # Rewrite a target only when the parser reads every `](target)` on the line as a
         # link, so code spans, escapes and other non-links stay byte-for-byte.
@@ -454,7 +463,7 @@ def compact_path_links(body, source):
         safe = {d for d in targets if links[(number, d)] == line.count(f']({d})')}
         if safe:
             lines[number - 1] = PATH_LINK.sub(
-                lambda m: f'`{m.group(1)}`' if m.group(2) in safe and same(m) else m.group(0), line)
+                lambda m: display(m) if m.group(2) in safe and same(m) else m.group(0), line)
     return '\n'.join(lines)
 
 
@@ -470,7 +479,7 @@ def render(cfg, name, root=None, display_root=None, scope=None, seen=None):
         body = section(s, root=root, scope=scope,
                        strip_default=cfg.get('stripFrontmatter', False))  # validate even when omitted
         if cfg.get('compactPathLinks', False):
-            body = compact_path_links(body, s['path'])
+            body = compact_path_links(body, s['path'], root=root, display_root=display_root)
         # Same owner root and identical source entry only: overlapping sections,
         # other path spellings and repeats inside one topic are kept.
         key = (ROOT if root is None else root, json.dumps(s, sort_keys=True))
@@ -1302,10 +1311,7 @@ def main(argv):
     try:
         # Validate the config-wide default up front, as mounted configs are, so a bad
         # value fails even when every source sets its own.
-        if not isinstance(cfg.get('stripFrontmatter', False), bool):
-            raise ValueError('stripFrontmatter: expected a boolean')
-        if not isinstance(cfg.get('compactPathLinks', False), bool):
-            raise ValueError('compactPathLinks: expected a boolean')
+        validate_defaults(cfg)
         entries = mount_entries(cfg)
     except ValueError as error:
         print(f'FAIL {diagnostic(error)}', file=sys.stdout if args == ['check'] else sys.stderr)

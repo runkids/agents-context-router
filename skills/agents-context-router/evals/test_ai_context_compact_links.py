@@ -114,7 +114,33 @@ class CompactPathLinksTests(unittest.TestCase):
         result = self.guide(ROW, 'guide', 'kb/guide')
         self.assertEqual((result.returncode, result.stderr), (0, ''))
         self.assertEqual(result.stdout, '<!-- wiki/guide.md -->\n' + ROW.strip() + '\n\n'
-                         '<!-- modules/kb/wiki/guide.md -->\n| Ship it | `docs/run.md` |\n')
+                         '<!-- modules/kb/wiki/guide.md -->\n| Ship it | `modules/kb/docs/run.md` |\n')
+
+    def test_mounted_heading_with_outer_compaction_and_duplicate_topic(self):
+        inner = self.root / 'modules/kb'
+        write_fixture(inner, 'AGENTS.md', '`guide`\n')
+        write_fixture(inner, 'wiki/README.md', '# Topics\n')
+        write_fixture(inner, 'docs/run.md', 'Inner run.\n')
+        write_fixture(inner, 'wiki/guide.md', '# Guide\n' + ROW + '# Other\n')
+        native = '<!-- wiki/guide.md § Guide -->\n# Guide\n| Ship it | `docs/run.md` |'
+        write_fixture(inner, 'wiki/ai-context.json', json.dumps({
+            'compactPathLinks': True, 'topics': {'guide': {'description': 'Inner',
+                'maxBytes': len(native.encode()), 'sources': [
+                    {'path': 'wiki/guide.md', 'heading': 'Guide'}]}}}))
+        self.cfg['mounts'] = {'kb': {'root': 'modules/kb'}}
+        self.configure(True)
+        result = self.guide(ROW, '--dedupe', 'guide', 'kb/guide', 'kb/guide')
+        self.assertEqual((result.returncode, result.stderr), (0, ''))
+        self.assertEqual(result.stdout, '<!-- wiki/guide.md -->\n| Ship it | `docs/run.md` |\n\n'
+                         '<!-- modules/kb/wiki/guide.md § Guide -->\n# Guide\n'
+                         '| Ship it | `modules/kb/docs/run.md` |\n')
+        inner_script = inner / 'scripts/ai-context.py'
+        inner_script.parent.mkdir()
+        shutil.copy2(SCRIPT, inner_script)
+        native_result = run_router(inner_script, 'guide')
+        self.assertEqual((native_result.returncode, native_result.stdout, native_result.stderr),
+                         (0, native + '\n', ''))
+        self.assertEqual(run_router(self.script, 'check').returncode, 0)
 
     def test_option_must_be_a_boolean(self):
         self.configure('yes')

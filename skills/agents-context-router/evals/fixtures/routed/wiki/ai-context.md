@@ -1,6 +1,6 @@
 # AI Context Router
 
-This page is the in-repo manual for keeping the agent docs routed and true. Load it with `python3 scripts/ai-context.py ai-context`.
+This page is the in-repo manual for keeping the agent docs routed and true. It works without any skill installed. Load it with `python3 scripts/ai-context.py ai-context`.
 
 Run `python3 scripts/ai-context.py --version` to identify the copied router's source release; no config is required. Updating the skill does not update this copy. Compare local customizations before replacing the script, and retain the repo's config and docs.
 
