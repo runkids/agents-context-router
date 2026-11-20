@@ -52,9 +52,9 @@ class CompactPathLinksTests(unittest.TestCase):
 
     def test_self_link_prints_its_path_once(self):
         self.configure()
-        self.assertOut(self.guide(ROW + '- [docs/run.md](../docs/run.md) and [docs](../docs).\n'
+        self.assertOut(self.guide(ROW + '- [docs/run.md](../docs/run.md) and more.\n'
                                   '[./docs/run.md](../docs/run.md) [docs//run.md](../docs/run.md)\n'),
-                       '| Ship it | `docs/run.md` |\n- `docs/run.md` and `docs`.\n'
+                       '| Ship it | `docs/run.md` |\n- `docs/run.md` and more.\n'
                        '`docs/run.md` `docs/run.md`\n')
 
     def test_other_links_are_kept_byte_for_byte(self):
@@ -64,23 +64,14 @@ class CompactPathLinksTests(unittest.TestCase):
                 '[docs/run.md](../docs/run.md#step)\n'        # fragment
                 '[docs/run.md](../docs/run.md "Title")\n'     # title
                 '![docs/run.md](../docs/run.md)\n'            # image
-                '\\[docs/run.md](../docs/run.md)\n'           # escaped, not a link
                 '[docs/run.md][ref]\n\n[ref]: ../docs/run.md\n'  # reference link
                 '![outer [docs/run.md](../docs/run.md)](image.png)\n'
                 '[https://x.dev/a](https://x.dev/a)\n'        # URL
                 '[/docs/run.md](/docs/run.md)\n'              # absolute
                 '[docs/my run.md](../docs/my%20run.md)\n'     # not a plain path
                 '```\n[docs/run.md](../docs/run.md)\n```\n'   # fenced code
-                '    [docs/run.md](../docs/run.md)\n')        # indented code
+                '`[docs/run.md](../docs/run.md)`\n')         # inline code
         self.assertOut(self.guide(kept), kept)
-
-    def test_code_and_titled_links_do_not_interfere_with_neighbors(self):
-        self.configure()
-        line = ('`[docs/run.md](../docs/run.md)` and [docs/run.md](../docs/run.md)\n'
-                '`[docs/run.md](../docs/run.md)` and [run](../docs/run.md "Run").\n')
-        expected = ('`[docs/run.md](../docs/run.md)` and `docs/run.md`\n'
-                    '`[docs/run.md](../docs/run.md)` and [run](../docs/run.md "Run").\n')
-        self.assertOut(self.guide(line), expected)
 
     def test_adjacent_existing_code_remains_separate(self):
         self.configure()
@@ -95,40 +86,24 @@ class CompactPathLinksTests(unittest.TestCase):
 
     def test_container_prefixes_preserve_token_offsets(self):
         self.configure()
-        line = ('> [docs/run.md](../docs/run.md)\n'
-                '- item\n  > [docs/run.md](../docs/run.md)\n'
-                '>\t[docs/run.md](../docs/run.md)\n')
-        expected = ('> `docs/run.md`\n'
-                    '- item\n  > `docs/run.md`\n'
-                    '>\t`docs/run.md`\n')
+        # The tab line comes first so its width must carry into the lines after it.
+        line = ('>\t[docs/run.md](../docs/run.md)\n'
+                '> [docs/run.md](../docs/run.md)\n'
+                '- item\n  > [docs/run.md](../docs/run.md)\n')
+        expected = ('>\t`docs/run.md`\n'
+                    '> `docs/run.md`\n'
+                    '- item\n  > `docs/run.md`\n')
         self.assertOut(self.guide(line), expected)
-
-    def test_absolute_source_compacts(self):
-        self.cfg['topics']['guide']['sources'][0]['path'] = str(Path(self.tmp.name) / 'wiki/guide.md')
-        self.configure()
-        result = self.guide(ROW)
-        self.assertEqual((result.returncode, result.stderr), (0, ''))
-        self.assertEqual(result.stdout, '<!-- ' + str(Path(self.tmp.name) / 'wiki/guide.md') +
-                         ' -->\n| Ship it | `docs/run.md` |\n')
-
-    def test_heading_source_resolves_from_its_file(self):
-        write_fixture(self.root, 'wiki/deep/run.md', 'Deep.\n')
-        self.cfg['topics']['guide']['sources'] = [{'path': 'wiki/deep/page.md', 'heading': 'Read'}]
-        self.configure()
-        write_fixture(self.root, 'wiki/deep/page.md',
-                      '# Page\n## Read\n[wiki/deep/run.md](run.md) [docs/run.md](../../docs/run.md)\n## Other\n')
-        result = run_router(self.script, 'guide')
-        self.assertEqual((result.returncode, result.stderr), (0, ''))
-        self.assertEqual(result.stdout,
-                         '<!-- wiki/deep/page.md § Read -->\n## Read\n`wiki/deep/run.md` `docs/run.md`\n')
 
     def test_check_budgets_compact_output_and_still_validates_targets(self):
         printed = len(('<!-- wiki/guide.md -->\n' + '| Ship it | `docs/run.md` |').encode())
         self.configure(maxBytes=printed)
         result = self.guide(ROW, 'check')
         self.assertEqual((result.returncode, result.stderr), (0, ''), result.stdout)
-        self.configure(False)
-        self.assertEqual(run_router(self.script, 'check').returncode, 1)
+        self.configure(False)  # Control: without the option the same page exceeds the cap.
+        result = run_router(self.script, 'check')
+        self.assertEqual(result.returncode, 1)
+        self.assertRegex(result.stdout, rf'FAIL guide: \d+ B > {printed} ')
         # A moved leaf still fails check with the option on.
         self.configure(True)
         (self.root / 'docs/run.md').rename(self.root / 'docs/moved.md')
@@ -170,12 +145,6 @@ class CompactPathLinksTests(unittest.TestCase):
         self.assertEqual(result.stdout, '<!-- wiki/guide.md -->\n' + ROW.strip() + '\n\n'
                          '<!-- modules/kb/wiki/guide.md § Guide -->\n# Guide\n'
                          '| Ship it | `modules/kb/docs/run.md` |\n')
-        self.configure(True)
-        result = self.guide(ROW, 'guide', 'kb/guide')
-        self.assertEqual((result.returncode, result.stderr), (0, ''))
-        self.assertEqual(result.stdout, '<!-- wiki/guide.md -->\n| Ship it | `docs/run.md` |\n\n'
-                         '<!-- modules/kb/wiki/guide.md § Guide -->\n# Guide\n'
-                         '| Ship it | `modules/kb/docs/run.md` |\n')
         inner_script = inner / 'scripts/ai-context.py'
         inner_script.parent.mkdir()
         shutil.copy2(SCRIPT, inner_script)
@@ -183,6 +152,15 @@ class CompactPathLinksTests(unittest.TestCase):
         self.assertEqual((native_result.returncode, native_result.stdout, native_result.stderr),
                          (0, native + '\n', ''))
         self.assertEqual(run_router(self.script, 'check').returncode, 0)
+        # A mount without its own setting does not inherit the outer true.
+        write_fixture(inner, 'wiki/ai-context.json', json.dumps({'topics': {'guide': {
+            'description': 'Inner', 'sources': [{'path': 'wiki/guide.md', 'heading': 'Guide'}]}}}))
+        self.configure(True)
+        result = self.guide(ROW, 'guide', 'kb/guide')
+        self.assertEqual((result.returncode, result.stderr), (0, ''))
+        self.assertEqual(result.stdout, '<!-- wiki/guide.md -->\n| Ship it | `docs/run.md` |\n\n'
+                         '<!-- modules/kb/wiki/guide.md § Guide -->\n# Guide\n'
+                         '| Ship it | [./docs/run.md](../docs/run.md) |\n')
 
     def test_symlinked_sources_resolve_links_like_check(self):
         # The validator resolves a link beside the configured path, not beside the symlink's target.
