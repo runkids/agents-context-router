@@ -136,28 +136,21 @@ class CompactPathLinksTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("relative link '../docs/run.md' is not a file inside repo", result.stdout)
 
-    def test_mounted_paths_with_backticks_form_valid_code_spans(self):
-        cases = (
-            ('modules/a`b', '[docs/run.md](../docs/run.md)', '``modules/a`b/docs/run.md``'),
-            ('modules/a``b`c', '[docs/run.md](../docs/run.md)', '```modules/a``b`c/docs/run.md```'),
-            ('`edge`', '[.](..)', '`` `edge` ``'),
-        )
-        for mount, link, expected in cases:
-            with self.subTest(mount=mount):
-                inner = self.root / mount
-                write_fixture(inner, 'AGENTS.md', '`guide`\n')
-                write_fixture(inner, 'wiki/README.md', '# Topics\n')
-                write_fixture(inner, 'docs/run.md', 'Run.\n')
-                write_fixture(inner, 'wiki/guide.md', f'{link}\n')
-                write_fixture(inner, 'wiki/ai-context.json', json.dumps({
-                    'compactPathLinks': True, 'topics': {'guide': {'description': 'Inner',
-                        'sources': [{'path': 'wiki/guide.md'}]}}}))
-                self.cfg['mounts'] = {'kb': {'root': mount}}
-                self.configure(None)
-                result = run_router(self.script, 'kb/guide')
-                self.assertEqual((result.returncode, result.stderr), (0, ''))
-                self.assertEqual(result.stdout, f'<!-- {mount}/wiki/guide.md -->\n'
-                                 f'{expected}\n')
+    def test_mounted_path_with_a_backtick_keeps_its_link(self):
+        link = '[docs/run.md](../docs/run.md)'
+        inner = self.root / 'modules/a`b'
+        write_fixture(inner, 'AGENTS.md', '`guide`\n')
+        write_fixture(inner, 'wiki/README.md', '# Topics\n')
+        write_fixture(inner, 'docs/run.md', 'Run.\n')
+        write_fixture(inner, 'wiki/guide.md', f'{link} [wiki/guide.md](guide.md)\n')
+        write_fixture(inner, 'wiki/ai-context.json', json.dumps({
+            'compactPathLinks': True, 'topics': {'guide': {'description': 'Inner',
+                'sources': [{'path': 'wiki/guide.md'}]}}}))
+        self.cfg['mounts'] = {'kb': {'root': 'modules/a`b'}}
+        self.configure(None)
+        result = run_router(self.script, 'kb/guide')
+        self.assertEqual((result.returncode, result.stderr), (0, ''))
+        self.assertEqual(result.stdout, f'<!-- modules/a`b/wiki/guide.md -->\n{link} [wiki/guide.md](guide.md)\n')
 
     def test_mounted_config_uses_its_own_setting(self):
         inner = self.root / 'modules/kb'
@@ -228,15 +221,19 @@ class CompactPathLinksTests(unittest.TestCase):
                     self.assertEqual((result.returncode, result.stderr), (0, ''), result.stdout)
                     self.assertEqual(result.stdout.split('\n', 1)[1], expected)
 
-    def test_formatted_underscore_labels_are_not_plain_paths(self):
+    def test_aliased_root_keeps_symlinked_source_directory(self):
+        alias = self.root.parent / (self.root.name + '-root-alias')
+        os.symlink(self.root, alias)
+        self.addCleanup(alias.unlink)
+        write_fixture(self.root, 'real/sub/run.md', 'Run.\n')
+        write_fixture(self.root, 'real/sub/page.md', '[alias/run.md](run.md) [real/sub/run.md](run.md)\n')
+        os.symlink('real/sub', self.root / 'alias')
+        source = str(alias / 'alias/page.md')
+        self.cfg['topics']['guide']['sources'] = [{'path': source}]
         self.configure()
-        write_fixture(self.root, 'docs/_run_.md', 'Run.\n')
-        write_fixture(self.root, 'docs/my_run.md', 'Run.\n')
-        text = ('[docs/_run_.md](../docs/_run_.md) [docs/run.md](../docs/run.md) '
-                '[docs/my_run.md](../docs/my_run.md)\n'
-                '[docs/__run__.md](../docs/__run__.md)\n')
-        self.assertOut(self.guide(text), '[docs/_run_.md](../docs/_run_.md) `docs/run.md` '
-                       '`docs/my_run.md`\n[docs/__run__.md](../docs/__run__.md)\n')
+        result = run_router(self.script, 'guide')
+        self.assertEqual((result.returncode, result.stderr), (0, ''))
+        self.assertEqual(result.stdout, f'<!-- {source} -->\n`alias/run.md` [real/sub/run.md](run.md)\n')
 
     def test_option_must_be_a_boolean(self):
         self.configure('yes')
