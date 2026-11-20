@@ -455,7 +455,7 @@ def compact_path_links(body, source, root=None, display_root=None):
         offsets.append(original - expanded - width)
         original += len(line) + 1
         expanded += len(line) + width + 1
-    pieces, last, previous = [], 0, None
+    pieces, last = [], 0
     for number, _, start, end in link_destinations(lines, spans=True):
         start, end = start + offsets[number - 1], end + offsets[number - 1]
         match = PATH_LINK.fullmatch(body[start:end])
@@ -465,13 +465,18 @@ def compact_path_links(body, source, root=None, display_root=None):
         if (path.startswith('/') or dest.startswith('/') or
                 posixpath.normpath(path) != posixpath.normpath(posixpath.join(base, dest))):
             continue
+        path = posixpath.normpath(path)
         if display_root is not None:
             path = os.path.relpath(os.path.join(owner, path), display_root).replace(os.sep, '/')
-        pieces.append(body[last:start])
-        if previous == start:
+        before = body[last:start]
+        if before:
+            pieces.append(before)
+        if pieces and pieces[-1].endswith('`'):
             pieces.append('<!-- -->')  # Keep adjacent code delimiters distinct.
         pieces.append(f'`{path}`')
-        last, previous = end, end
+        if body[end:end + 1] == '`':
+            pieces.append('<!-- -->')
+        last = end
     pieces.append(body[last:])
     return ''.join(pieces)
 

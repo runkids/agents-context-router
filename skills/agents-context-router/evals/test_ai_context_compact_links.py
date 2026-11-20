@@ -51,8 +51,10 @@ class CompactPathLinksTests(unittest.TestCase):
 
     def test_self_link_prints_its_path_once(self):
         self.configure()
-        self.assertOut(self.guide(ROW + '- [docs/run.md](../docs/run.md) and [docs](../docs).\n'),
-                       '| Ship it | `docs/run.md` |\n- `docs/run.md` and `docs`.\n')
+        self.assertOut(self.guide(ROW + '- [docs/run.md](../docs/run.md) and [docs](../docs).\n'
+                                  '[./docs/run.md](../docs/run.md) [docs//run.md](../docs/run.md)\n'),
+                       '| Ship it | `docs/run.md` |\n- `docs/run.md` and `docs`.\n'
+                       '`docs/run.md` `docs/run.md`\n')
 
     def test_other_links_are_kept_byte_for_byte(self):
         self.configure()
@@ -82,6 +84,16 @@ class CompactPathLinksTests(unittest.TestCase):
         self.configure()
         self.assertOut(self.guide('[docs/run.md](../docs/run.md)[docs/run.md](../docs/run.md)\n'),
                        '`docs/run.md`<!-- -->`docs/run.md`\n')
+
+    def test_adjacent_existing_code_remains_separate(self):
+        self.configure()
+        link = '[docs/run.md](../docs/run.md)'
+        code = '`docs/run.md`'
+        sep = '<!-- -->'
+        self.assertOut(self.guide(f'`before`{link}\n{link}`after`\n'
+                                  f'`before`{link}{link}`after`\n'),
+                       f'`before`{sep}{code}\n{code}{sep}`after`\n'
+                       f'`before`{sep}{code}{sep}{code}{sep}`after`\n')
 
     def test_container_prefixes_and_nested_images_preserve_token_offsets(self):
         self.configure()
@@ -135,7 +147,7 @@ class CompactPathLinksTests(unittest.TestCase):
         write_fixture(inner, 'AGENTS.md', '`guide`\n')
         write_fixture(inner, 'wiki/README.md', '# Topics\n')
         write_fixture(inner, 'docs/run.md', 'Run.\n')
-        write_fixture(inner, 'wiki/guide.md', ROW)
+        write_fixture(inner, 'wiki/guide.md', '`before`[./docs/run.md](../docs/run.md)`after`\n')
         write_fixture(inner, 'wiki/ai-context.json', json.dumps(
             {'compactPathLinks': True, 'topics': {'guide': {'description': 'Inner', 'sources': [
                 {'path': str(inner / 'wiki/guide.md')}]}}}))
@@ -144,7 +156,8 @@ class CompactPathLinksTests(unittest.TestCase):
         result = self.guide(ROW, 'guide', 'kb/guide')
         self.assertEqual((result.returncode, result.stderr), (0, ''))
         self.assertEqual(result.stdout, '<!-- wiki/guide.md -->\n' + ROW.strip() + '\n\n'
-                         '<!-- modules/kb/wiki/guide.md -->\n| Ship it | `modules/kb/docs/run.md` |\n')
+                         '<!-- modules/kb/wiki/guide.md -->\n'
+                         '`before`<!-- -->`modules/kb/docs/run.md`<!-- -->`after`\n')
 
     def test_mounted_heading_with_outer_compaction_and_duplicate_topic(self):
         inner = self.root / 'modules/kb'
