@@ -437,15 +437,19 @@ def section(src, root=None, scope=None, strip_default=False):
 
 
 # A plain relative path: no spaces, escapes, entities, percent-encoding, emphasis
-# or code markers, so the text is exactly the path it names.
-PATH_LINK = re.compile(r'\[([A-Za-z0-9._~/+-]+)\]\(([A-Za-z0-9._~/+-]+)\)')
+# or code markers, so the text is the path it names. In the label an underscore
+# counts only between letters or digits, where Markdown never reads it as emphasis.
+PATH_LINK = re.compile(r'\[((?:[A-Za-z0-9.~/+-]|(?<=[A-Za-z0-9])_(?=[A-Za-z0-9]))+)\]\(([A-Za-z0-9._~/+-]+)\)')
 
 
+# Links resolve from the configured source path, not a symlink's target, as link_problems does.
 def compact_path_links(body, source, root=None, display_root=None):
     """Print parser-recognized plain path links as their root-relative paths."""
     owner = ROOT if root is None else root
-    base = posixpath.dirname(os.path.relpath(os.path.realpath(os.path.join(owner, source.replace('\\', '/'))),
-                                            owner).replace(os.sep, '/'))
+    where = os.path.dirname(os.path.abspath(os.path.join(owner, source.replace('\\', '/'))))
+    base = os.path.relpath(where, owner).replace(os.sep, '/')
+    if base.startswith('../'):  # an aliased root; keep aliased source directories as configured
+        base = os.path.relpath(os.path.realpath(where), os.path.realpath(owner)).replace(os.sep, '/')
     lines = body.split('\n')
     # The block scanner expands tabs in container prefixes before computing spans.
     offsets, original, expanded = [], 0, 0
@@ -468,10 +472,8 @@ def compact_path_links(body, source, root=None, display_root=None):
         path = posixpath.normpath(path)
         if display_root is not None:
             path = os.path.relpath(os.path.join(owner, path), display_root).replace(os.sep, '/')
-        before = body[last:start]
-        if before:
-            pieces.append(before)
-        if pieces and pieces[-1].endswith('`'):
+        pieces.append(body[last:start])
+        if ''.join(pieces[-2:]).endswith('`'):
             pieces.append('<!-- -->')  # Keep adjacent code delimiters distinct.
         tick = '`' * (1 + max(map(len, BACKTICKS.findall(path)), default=0))
         pad = ' ' if path[0] == '`' or path[-1] == '`' else ''

@@ -1,5 +1,6 @@
 """compactPathLinks prints a link whose text is its own root-relative target as that path."""
 import json
+import os
 from pathlib import Path
 import shutil
 import sys
@@ -189,6 +190,53 @@ class CompactPathLinksTests(unittest.TestCase):
         self.assertEqual((native_result.returncode, native_result.stdout, native_result.stderr),
                          (0, native + '\n', ''))
         self.assertEqual(run_router(self.script, 'check').returncode, 0)
+
+    def test_symlinked_sources_resolve_links_like_check(self):
+        # The validator resolves a link beside the configured path, not beside the symlink's target.
+        for mount in ('', 'modules/kb'):
+            for kind in ('file', 'directory'):
+                with self.subTest(mount=mount, kind=kind):
+                    base = self.root / mount / kind
+                    for name in ('run.md', 'wiki/run.md', 'real/run.md', 'real/sub/run.md'):
+                        write_fixture(base, name, 'Run.\n')
+                    if kind == 'file':
+                        # file/wiki/run.md is the target; file/real/run.md sits beside the physical page.
+                        write_fixture(base, 'real/page.md', '[file/wiki/run.md](run.md) [file/real/run.md](run.md)\n')
+                        os.symlink('../real/page.md', base / 'wiki/alias.md')
+                        source, kept, other = 'wiki/alias.md', 'file/wiki/run.md', 'file/real/run.md'
+                    else:
+                        # ../run.md leaves the alias lexically: directory/run.md is the target.
+                        write_fixture(base, 'real/sub/page.md',
+                                      '[directory/run.md](../run.md) [directory/real/run.md](../run.md)\n')
+                        os.symlink('real/sub', base / 'alias')
+                        source, kept, other = 'alias/page.md', 'directory/run.md', 'directory/real/run.md'
+                    config = {'compactPathLinks': True, 'topics': {'guide': {
+                        'description': 'Guide', 'sources': [{'path': f'{kind}/{source}'}]}}}
+                    link = '../run.md' if kind == 'directory' else 'run.md'
+                    expected = f'`{mount + "/" if mount else ""}{kept}` [{other}]({link})\n'
+                    if mount:
+                        write_fixture(self.root / mount, 'AGENTS.md', '`guide`\n')
+                        write_fixture(self.root / mount, 'wiki/README.md', '# Topics\n')
+                        write_fixture(self.root / mount, 'wiki/ai-context.json', json.dumps(config))
+                        self.cfg['mounts'] = {'kb': {'root': mount}}
+                        self.configure(None)
+                        result = run_router(self.script, 'kb/guide')
+                    else:
+                        self.cfg['topics']['guide']['sources'] = config['topics']['guide']['sources']
+                        self.configure()
+                        result = run_router(self.script, 'guide')
+                    self.assertEqual((result.returncode, result.stderr), (0, ''), result.stdout)
+                    self.assertEqual(result.stdout.split('\n', 1)[1], expected)
+
+    def test_formatted_underscore_labels_are_not_plain_paths(self):
+        self.configure()
+        write_fixture(self.root, 'docs/_run_.md', 'Run.\n')
+        write_fixture(self.root, 'docs/my_run.md', 'Run.\n')
+        text = ('[docs/_run_.md](../docs/_run_.md) [docs/run.md](../docs/run.md) '
+                '[docs/my_run.md](../docs/my_run.md)\n'
+                '[docs/__run__.md](../docs/__run__.md)\n')
+        self.assertOut(self.guide(text), '[docs/_run_.md](../docs/_run_.md) `docs/run.md` '
+                       '`docs/my_run.md`\n[docs/__run__.md](../docs/__run__.md)\n')
 
     def test_option_must_be_a_boolean(self):
         self.configure('yes')
