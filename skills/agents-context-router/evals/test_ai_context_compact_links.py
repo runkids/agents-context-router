@@ -159,6 +159,29 @@ class CompactPathLinksTests(unittest.TestCase):
                          '<!-- modules/kb/wiki/guide.md -->\n'
                          '`before`<!-- -->`modules/kb/docs/run.md`<!-- -->`after`\n')
 
+    def test_mounted_paths_with_backticks_form_valid_code_spans(self):
+        cases = (
+            ('modules/a`b', '[docs/run.md](../docs/run.md)', '``modules/a`b/docs/run.md``'),
+            ('modules/a``b`c', '[docs/run.md](../docs/run.md)', '```modules/a``b`c/docs/run.md```'),
+            ('`edge`', '[.](..)', '`` `edge` ``'),
+        )
+        for mount, link, expected in cases:
+            with self.subTest(mount=mount):
+                inner = self.root / mount
+                write_fixture(inner, 'AGENTS.md', '`guide`\n')
+                write_fixture(inner, 'wiki/README.md', '# Topics\n')
+                write_fixture(inner, 'docs/run.md', 'Run.\n')
+                write_fixture(inner, 'wiki/guide.md', f'`before`{link}`after`\n')
+                write_fixture(inner, 'wiki/ai-context.json', json.dumps({
+                    'compactPathLinks': True, 'topics': {'guide': {'description': 'Inner',
+                        'sources': [{'path': 'wiki/guide.md'}]}}}))
+                self.cfg['mounts'] = {'kb': {'root': mount}}
+                self.configure(None)
+                result = run_router(self.script, 'kb/guide')
+                self.assertEqual((result.returncode, result.stderr), (0, ''))
+                self.assertEqual(result.stdout, f'<!-- {mount}/wiki/guide.md -->\n'
+                                 f'`before`<!-- -->{expected}<!-- -->`after`\n')
+
     def test_mounted_heading_with_outer_compaction_and_duplicate_topic(self):
         inner = self.root / 'modules/kb'
         write_fixture(inner, 'AGENTS.md', '`guide`\n')

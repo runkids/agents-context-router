@@ -438,7 +438,7 @@ def section(src, root=None, scope=None, strip_default=False):
 
 # A plain relative path: no spaces, escapes, entities, percent-encoding, emphasis
 # or code markers, so the text is exactly the path it names.
-PATH_LINK = re.compile(r'(?<![!\\\[])\[([A-Za-z0-9._~/+-]+)\]\(([A-Za-z0-9._~/+-]+)\)')
+PATH_LINK = re.compile(r'\[([A-Za-z0-9._~/+-]+)\]\(([A-Za-z0-9._~/+-]+)\)')
 
 
 def compact_path_links(body, source, root=None, display_root=None):
@@ -462,7 +462,7 @@ def compact_path_links(body, source, root=None, display_root=None):
         if not match:
             continue
         path, dest = match.groups()
-        if (path.startswith('/') or dest.startswith('/') or
+        if (path.startswith('/') or
                 posixpath.normpath(path) != posixpath.normpath(posixpath.join(base, dest))):
             continue
         path = posixpath.normpath(path)
@@ -473,9 +473,9 @@ def compact_path_links(body, source, root=None, display_root=None):
             pieces.append(before)
         if pieces and pieces[-1].endswith('`'):
             pieces.append('<!-- -->')  # Keep adjacent code delimiters distinct.
-        pieces.append(f'`{path}`')
-        if body[end:end + 1] == '`':
-            pieces.append('<!-- -->')
+        tick = '`' * (1 + max(map(len, BACKTICKS.findall(path)), default=0))
+        pad = ' ' if path[0] == '`' or path[-1] == '`' else ''
+        pieces.append(f'{tick}{pad}{path}{pad}{tick}' + '<!-- -->' * (body[end:end + 1] == '`'))
         last = end
     pieces.append(body[last:])
     return ''.join(pieces)
@@ -1131,7 +1131,7 @@ def link_destinations(lines, spans=False):
                             used.add(reference)
                         else:
                             if spans:
-                                if not image and source_line == line and not any(item[2] for item in stack):
+                                if not image and not any(item[2] for item in stack):
                                     yield source_line, target, opening, stop
                             else:
                                 yield source_line, target
