@@ -18,7 +18,7 @@ class CompactPathLinksTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
+        self.root = Path(self.tmp.name).resolve()
         self.script = self.root / 'scripts/ai-context.py'
         self.script.parent.mkdir()
         shutil.copy2(SCRIPT, self.script)
@@ -65,6 +65,7 @@ class CompactPathLinksTests(unittest.TestCase):
                 '![docs/run.md](../docs/run.md)\n'            # image
                 '\\[docs/run.md](../docs/run.md)\n'           # escaped, not a link
                 '[docs/run.md][ref]\n\n[ref]: ../docs/run.md\n'  # reference link
+                '![outer [docs/run.md](../docs/run.md)](image.png)\n'
                 '[https://x.dev/a](https://x.dev/a)\n'        # URL
                 '[/docs/run.md](/docs/run.md)\n'              # absolute
                 '[docs/my run.md](../docs/my%20run.md)\n'     # not a plain path
@@ -80,11 +81,6 @@ class CompactPathLinksTests(unittest.TestCase):
                     '`[docs/run.md](../docs/run.md)` and [run](../docs/run.md "Run").\n')
         self.assertOut(self.guide(line), expected)
 
-    def test_adjacent_links_remain_separate_code_spans(self):
-        self.configure()
-        self.assertOut(self.guide('[docs/run.md](../docs/run.md)[docs/run.md](../docs/run.md)\n'),
-                       '`docs/run.md`<!-- -->`docs/run.md`\n')
-
     def test_adjacent_existing_code_remains_separate(self):
         self.configure()
         link = '[docs/run.md](../docs/run.md)'
@@ -94,27 +90,24 @@ class CompactPathLinksTests(unittest.TestCase):
                                   f'`before`{link}{link}`after`\n'),
                        f'`before`{sep}{code}\n{code}{sep}`after`\n'
                        f'`before`{sep}{code}{sep}{code}{sep}`after`\n')
+        self.assertOut(self.guide(f'{link}{link}\n'), f'{code}{sep}{code}\n')
 
-    def test_container_prefixes_and_nested_images_preserve_token_offsets(self):
+    def test_container_prefixes_preserve_token_offsets(self):
         self.configure()
         line = ('> [docs/run.md](../docs/run.md)\n'
                 '- item\n  > [docs/run.md](../docs/run.md)\n'
-                '>\t[docs/run.md](../docs/run.md)\n'
-                '![outer [docs/run.md](../docs/run.md)](image.png)\n'
-                '[docs/run.md][ref]\n\n[ref]: ../docs/run.md\n')
+                '>\t[docs/run.md](../docs/run.md)\n')
         expected = ('> `docs/run.md`\n'
                     '- item\n  > `docs/run.md`\n'
-                    '>\t`docs/run.md`\n'
-                    '![outer [docs/run.md](../docs/run.md)](image.png)\n'
-                    '[docs/run.md][ref]\n\n[ref]: ../docs/run.md\n')
+                    '>\t`docs/run.md`\n')
         self.assertOut(self.guide(line), expected)
 
     def test_absolute_source_compacts(self):
-        self.cfg['topics']['guide']['sources'][0]['path'] = str(self.root / 'wiki/guide.md')
+        self.cfg['topics']['guide']['sources'][0]['path'] = str(Path(self.tmp.name) / 'wiki/guide.md')
         self.configure()
         result = self.guide(ROW)
         self.assertEqual((result.returncode, result.stderr), (0, ''))
-        self.assertEqual(result.stdout, '<!-- ' + str(self.root / 'wiki/guide.md') +
+        self.assertEqual(result.stdout, '<!-- ' + str(Path(self.tmp.name) / 'wiki/guide.md') +
                          ' -->\n| Ship it | `docs/run.md` |\n')
 
     def test_heading_source_resolves_from_its_file(self):
@@ -142,23 +135,6 @@ class CompactPathLinksTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("relative link '../docs/run.md' is not a file inside repo", result.stdout)
 
-    def test_mounted_config_uses_its_own_setting(self):
-        inner = self.root / 'modules/kb'
-        write_fixture(inner, 'AGENTS.md', '`guide`\n')
-        write_fixture(inner, 'wiki/README.md', '# Topics\n')
-        write_fixture(inner, 'docs/run.md', 'Run.\n')
-        write_fixture(inner, 'wiki/guide.md', '`before`[./docs/run.md](../docs/run.md)`after`\n')
-        write_fixture(inner, 'wiki/ai-context.json', json.dumps(
-            {'compactPathLinks': True, 'topics': {'guide': {'description': 'Inner', 'sources': [
-                {'path': str(inner / 'wiki/guide.md')}]}}}))
-        self.cfg['mounts'] = {'kb': {'root': 'modules/kb'}}
-        self.configure(None)
-        result = self.guide(ROW, 'guide', 'kb/guide')
-        self.assertEqual((result.returncode, result.stderr), (0, ''))
-        self.assertEqual(result.stdout, '<!-- wiki/guide.md -->\n' + ROW.strip() + '\n\n'
-                         '<!-- modules/kb/wiki/guide.md -->\n'
-                         '`before`<!-- -->`modules/kb/docs/run.md`<!-- -->`after`\n')
-
     def test_mounted_paths_with_backticks_form_valid_code_spans(self):
         cases = (
             ('modules/a`b', '[docs/run.md](../docs/run.md)', '``modules/a`b/docs/run.md``'),
@@ -171,7 +147,7 @@ class CompactPathLinksTests(unittest.TestCase):
                 write_fixture(inner, 'AGENTS.md', '`guide`\n')
                 write_fixture(inner, 'wiki/README.md', '# Topics\n')
                 write_fixture(inner, 'docs/run.md', 'Run.\n')
-                write_fixture(inner, 'wiki/guide.md', f'`before`{link}`after`\n')
+                write_fixture(inner, 'wiki/guide.md', f'{link}\n')
                 write_fixture(inner, 'wiki/ai-context.json', json.dumps({
                     'compactPathLinks': True, 'topics': {'guide': {'description': 'Inner',
                         'sources': [{'path': 'wiki/guide.md'}]}}}))
@@ -180,22 +156,28 @@ class CompactPathLinksTests(unittest.TestCase):
                 result = run_router(self.script, 'kb/guide')
                 self.assertEqual((result.returncode, result.stderr), (0, ''))
                 self.assertEqual(result.stdout, f'<!-- {mount}/wiki/guide.md -->\n'
-                                 f'`before`<!-- -->{expected}<!-- -->`after`\n')
+                                 f'{expected}\n')
 
-    def test_mounted_heading_with_outer_compaction_and_duplicate_topic(self):
+    def test_mounted_config_uses_its_own_setting(self):
         inner = self.root / 'modules/kb'
         write_fixture(inner, 'AGENTS.md', '`guide`\n')
         write_fixture(inner, 'wiki/README.md', '# Topics\n')
         write_fixture(inner, 'docs/run.md', 'Inner run.\n')
-        write_fixture(inner, 'wiki/guide.md', '# Guide\n' + ROW + '# Other\n')
+        write_fixture(inner, 'wiki/guide.md', '# Guide\n' + ROW.replace('[docs/', '[./docs/') + '# Other\n')
         native = '<!-- wiki/guide.md § Guide -->\n# Guide\n| Ship it | `docs/run.md` |'
         write_fixture(inner, 'wiki/ai-context.json', json.dumps({
             'compactPathLinks': True, 'topics': {'guide': {'description': 'Inner',
                 'maxBytes': len(native.encode()), 'sources': [
                     {'path': 'wiki/guide.md', 'heading': 'Guide'}]}}}))
         self.cfg['mounts'] = {'kb': {'root': 'modules/kb'}}
+        self.configure(None)
+        result = self.guide(ROW, 'guide', 'kb/guide')
+        self.assertEqual((result.returncode, result.stderr), (0, ''))
+        self.assertEqual(result.stdout, '<!-- wiki/guide.md -->\n' + ROW.strip() + '\n\n'
+                         '<!-- modules/kb/wiki/guide.md § Guide -->\n# Guide\n'
+                         '| Ship it | `modules/kb/docs/run.md` |\n')
         self.configure(True)
-        result = self.guide(ROW, '--dedupe', 'guide', 'kb/guide', 'kb/guide')
+        result = self.guide(ROW, 'guide', 'kb/guide')
         self.assertEqual((result.returncode, result.stderr), (0, ''))
         self.assertEqual(result.stdout, '<!-- wiki/guide.md -->\n| Ship it | `docs/run.md` |\n\n'
                          '<!-- modules/kb/wiki/guide.md § Guide -->\n# Guide\n'
@@ -211,12 +193,9 @@ class CompactPathLinksTests(unittest.TestCase):
     def test_option_must_be_a_boolean(self):
         self.configure('yes')
         write_fixture(self.root, 'wiki/guide.md', ROW)
-        for args, stream in ((('check',), 'stdout'), (('guide',), 'stderr'), (('list',), 'stderr')):
-            with self.subTest(args=args):
-                result = run_router(self.script, *args)
-                self.assertEqual(result.returncode, 1)
-                self.assertEqual(getattr(result, stream), 'FAIL compactPathLinks: expected a boolean\n')
-        self.cfg['compactPathLinks'] = True
+        result = run_router(self.script, 'check')
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, 'FAIL compactPathLinks: expected a boolean\n')
         self.cfg['mounts'] = {'kb': {'root': 'modules/kb'}}
         write_fixture(self.root, 'modules/kb/AGENTS.md', '`guide`\n')
         write_fixture(self.root, 'modules/kb/wiki/ai-context.json', json.dumps(

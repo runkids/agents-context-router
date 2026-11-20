@@ -444,7 +444,7 @@ PATH_LINK = re.compile(r'\[([A-Za-z0-9._~/+-]+)\]\(([A-Za-z0-9._~/+-]+)\)')
 def compact_path_links(body, source, root=None, display_root=None):
     """Print parser-recognized plain path links as their root-relative paths."""
     owner = ROOT if root is None else root
-    base = posixpath.dirname(os.path.relpath(os.path.join(owner, source.replace('\\', '/')),
+    base = posixpath.dirname(os.path.relpath(os.path.realpath(os.path.join(owner, source.replace('\\', '/'))),
                                             owner).replace(os.sep, '/'))
     lines = body.split('\n')
     # The block scanner expands tabs in container prefixes before computing spans.
