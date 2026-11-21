@@ -410,22 +410,25 @@ def page_description(lines):
                     result, end_value = json.JSONDecoder().raw_decode(value)
                 except ValueError:
                     return ''
-                if any(0xd800 <= ord(char) <= 0xdfff for char in result):
-                    return ''
             else:
                 quoted = re.match(r"'((?:[^']|'')*)'", value)
                 if not quoted:
                     return ''
                 result, end_value = quoted.group(1).replace("''", "'"), quoted.end()
             tail = value[end_value:]
-            return result if not tail or re.fullmatch(r'[ \t]+(?:#.*)?', tail) else ''
-        value = re.split(r'[ \t]+#', value, maxsplit=1)[0].strip()
-        if (not value or value[0] in '[]{},#&*!|>%@`'
-                or re.match(r'^[-?:](?:[ \t]|$)', value)
-                or re.search(r':(?:[ \t]|$)', value)
-                or value.lower() in ('~', 'null')):
+            if tail and not re.fullmatch(r'[ \t]+(?:#.*)?', tail):
+                return ''
+        else:
+            result = re.split(r'[ \t]+#', value, maxsplit=1)[0].strip()
+            if (not result or result[0] in '[]{},#&*!|>%@`'
+                    or re.match(r'^[-?:](?:[ \t]|$)', result)
+                    or re.search(r':(?:[ \t]|$)', result)
+                    or result.lower() in ('~', 'null')):
+                return ''
+        if any((ord(char) < 0x20 and char != '\t') or 0x7f <= ord(char) <= 0x9f
+               or 0xd800 <= ord(char) <= 0xdfff for char in result):
             return ''
-        return value
+        return result
     return ''
 
 

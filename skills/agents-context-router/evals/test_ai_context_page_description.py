@@ -92,6 +92,20 @@ class PageDescriptionTests(unittest.TestCase):
         self.topic['sources'] = []
         self.assert_list('')
 
+    def test_control_characters_in_scalar_forms(self):
+        for char in ('\n', '\x1b', '\x00', '\x7f', '\x85'):
+            scalars = [json.dumps('a' + char + 'b'), "'a" + char + "b'"]
+            if char != '\n':
+                scalars.append('a' + char + 'b')
+            for scalar in scalars:
+                with self.subTest(char=ascii(char), scalar=ascii(scalar)):
+                    write_fixture(self.root, 'wiki/guide.md', f'---\ndescription: {scalar}\n---\n')
+                    self.assert_list('')
+        for scalar in (r'"a\tb"', "'a\tb'", 'a\tb'):
+            with self.subTest(scalar=ascii(scalar)):
+                write_fixture(self.root, 'wiki/guide.md', f'---\ndescription: {scalar}\n---\n')
+                self.assert_list('a\tb')
+
     def test_check_accepts_missing_description(self):
         write_fixture(self.root, 'wiki/guide.md', '---\ndescription: A guide\n---\n# Guide\n')
         self.configure()
