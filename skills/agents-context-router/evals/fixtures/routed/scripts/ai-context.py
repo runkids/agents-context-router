@@ -646,13 +646,14 @@ def orphans(cfg, reference_text='', root=None, excluded_roots=(), scope=None):
             # Membership and exemptions follow the scanned path, not its target.
             if root is not None and scanned in exemptions:
                 continue
+            if okf and f in ('index.md', 'log.md'):
+                continue
             if scanned.startswith(history + '/') or (root is not None and history == '.'):
                 if not history_indexed(path, rel, wiki, router_text, cfg, root=root):
                     bad.append(f'{rel}: history file not indexed in {router}')
             elif scanned.startswith(wiki + '/') or (root is not None and wiki == '.'):
                 if (scanned != router and identity not in routed
-                        and (root is None or scanned != root_file)
-                        and not (okf and f in ('index.md', 'log.md'))):
+                        and (root is None or scanned != root_file)):
                     bad.append(f'{rel}: wiki page no topic loads (map it, or list it under "unrouted" with a reason)')
             elif f == 'AGENTS.md' and scanned != root_file and identity not in routed:
                 bad.append(f'{rel}: scoped instructions no topic loads')

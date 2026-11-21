@@ -68,14 +68,20 @@ class OkfReservedTests(unittest.TestCase):
         for name in ('area/index.md', 'area/log.md', 'index.md.bak'):
             self.assertNotIn('wiki/' + name + ': wiki page no topic loads', result.stdout)
 
-    def test_history_and_indexed_checks_still_apply(self):
-        self.cfg.update(okfReservedPages=True, indexed=['wiki/index.md'])
+    def test_history_reserved_pages_and_indexed_check(self):
+        self.cfg['indexed'] = ['wiki/index.md']
         write_fixture(self.root, 'wiki/index.md', '# Index\n')
-        write_fixture(self.root, 'wiki/history/log.md', '# History\n')
-        result = self.check()
-        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn('wiki/index.md: indexed page not named', result.stdout)
-        self.assertIn('wiki/history/log.md: history file not indexed', result.stdout)
+        for name in ('index.md', 'log.md'):
+            write_fixture(self.root, 'wiki/history/' + name, '# History\n')
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled):
+                self.cfg['okfReservedPages'] = enabled
+                result = self.check()
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn('wiki/index.md: indexed page not named', result.stdout)
+                for name in ('index.md', 'log.md'):
+                    self.assertEqual('wiki/history/' + name + ': history file not indexed' in result.stdout,
+                                     not enabled)
 
     def test_links_in_reserved_pages_are_checked(self):
         self.cfg['okfReservedPages'] = True
