@@ -223,7 +223,7 @@ To keep page metadata out of printed context and byte budgets, set `"stripFrontm
 
 If topic pages list paths as links whose text is the path from the root, such as `[docs/run.md](../docs/run.md)`, set `"compactPathLinks": true` at the top level of the config to print each one once, as `` `docs/run.md` ``. Only plain relative paths the parser reads as links change; other links, code and the pages themselves stay as they are. `check` still validates every link and budgets the compact output. Default false. For mounted topics, the printed compact paths are relative to the outer root, while each mount's budget counts its own native paths.
 
-A topic may leave out `description`. If its first source is a whole page, `list` then shows the `description:` line from that page's closed opening frontmatter, so an OKF wiki keeps each summary once, in its page. The value must be one line, plain, single-quoted or double-quoted; a trailing `# comment` is dropped. Any other form, or a first source with a `heading`, lists an empty description. A description in the config still wins.
+Apart from one field, `description:`, the router reads no frontmatter: a topic may leave out `description`, and `list` then shows the `description:` line from its first source's page frontmatter, whether or not that source selects a heading. An OKF wiki can then keep each summary once, in its page. A description in the config still wins. `list` reads a one-line plain, single-quoted or JSON-style double-quoted value and drops a trailing `# comment`. A `null` value, a block or list, an anchor or tag, a value continued on the next line, or a YAML-only escape lists blank.
 
 ## Contributing
 
