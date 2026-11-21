@@ -46,7 +46,7 @@ class PageDescriptionTests(unittest.TestCase):
         self.topic['sources'].append({'path': 'wiki/second.md'})
         write_fixture(self.root, 'wiki/guide.md', '---\ndescription: First\n---\n# Section\n')
         write_fixture(self.root, 'wiki/second.md', '---\ndescription: Second\n---\n')
-        self.assert_list('First')
+        self.assert_list('')
         write_fixture(self.root, 'wiki/guide.md', '# Section\n')
         self.assert_list('')
 
@@ -55,10 +55,50 @@ class PageDescriptionTests(unittest.TestCase):
                 ("---\ndescription: 'It''s useful'\n---\n", "It's useful"),
                 ('---\ndescription: "Double quoted"\n---\n', 'Double quoted'),
                 ('\ufeff---\r\ndescription:\tUnicode café\r\n...\r\n', 'Unicode café'),
-                ('---\ndescription: Value # comment\n---\n', 'Value # comment')]:
+                ('---\ndescription: Value # comment\n---\n', 'Value')]:
             with self.subTest(text=text):
                 write_fixture(self.root, 'wiki/guide.md', text)
                 self.assert_list(expected)
+
+    def test_plain_comment_and_hash(self):
+        for scalar, expected in [('Value # comment', 'Value'), ('Value#part', 'Value#part')]:
+            with self.subTest(scalar=scalar):
+                write_fixture(self.root, 'wiki/guide.md', f'---\ndescription: {scalar}\n---\n')
+                self.assert_list(expected)
+
+    def test_quoted_trailing_comments(self):
+        for scalar, expected in [("'It''s # useful' # note", "It's # useful"),
+                                 ('"Quoted # value" # note', 'Quoted # value')]:
+            with self.subTest(scalar=scalar):
+                write_fixture(self.root, 'wiki/guide.md', f'---\ndescription: {scalar}\n---\n')
+                self.assert_list(expected)
+
+    def test_double_quoted_escapes(self):
+        write_fixture(self.root, 'wiki/guide.md',
+                      r'---' + '\n' + r'description: "Explain \"quoted\" caf\u00e9"' + '\n---\n')
+        self.assert_list('Explain "quoted" café')
+
+    def test_null_and_indicator_values_are_rejected(self):
+        for scalar in ['~', 'null', 'Null', '&anchor Text', '*alias', '!tag Text',
+                       '- item', '? key', ': value', '@reserved', '`reserved', 'true', '123',
+                       '0xFF', '0b10', '0o17', '.5', '2024-01-01']:
+            with self.subTest(scalar=scalar):
+                write_fixture(self.root, 'wiki/guide.md', f'---\ndescription: {scalar}\n---\n')
+                self.assert_list('')
+
+    def test_continued_scalar_is_rejected(self):
+        for scalar in ['first line', '"first line', "'first line"]:
+            with self.subTest(scalar=scalar):
+                write_fixture(self.root, 'wiki/guide.md',
+                              f'---\ndescription: {scalar}\n  second line\n---\n')
+                self.assert_list('')
+
+    def test_unclosed_or_invalid_quoted_scalar_is_rejected(self):
+        for scalar in ['"unclosed', "'unclosed", '"value"extra', '"bad\\q"',
+                       '"bad\\u12xz"', '"bad\\uD800"']:
+            with self.subTest(scalar=scalar):
+                write_fixture(self.root, 'wiki/guide.md', f'---\ndescription: {scalar}\n---\n')
+                self.assert_list('')
 
     def test_missing_or_unsupported_description(self):
         for text in ['# No envelope\n', '---\ndescription: unclosed\n',
