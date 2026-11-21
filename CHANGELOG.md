@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/runkids/agents-context-router/compare/v0.5.0...v0.6.0) (2026-11-21)
+
+
+### Features
+
+* opt in to exempting OKF reserved pages from orphan checks ([#24](https://github.com/runkids/agents-context-router/issues/24)) ([94eaf48](https://github.com/runkids/agents-context-router/commit/94eaf48d15df99b3b4663e6e5811093a3b88016d))
+
 ## [0.5.0](https://github.com/runkids/agents-context-router/compare/v0.4.0...v0.5.0) (2026-11-20)
 
 
