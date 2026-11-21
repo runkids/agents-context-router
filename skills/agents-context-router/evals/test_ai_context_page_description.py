@@ -56,6 +56,17 @@ class PageDescriptionTests(unittest.TestCase):
                 self.topic['sources'] = [source, {'path': 'wiki/guide.md'}]
                 self.assert_list('')
 
+    def test_non_string_first_path_still_lists_later_topic(self):
+        config = {'topics': {
+            'guide': {'sources': [{'path': 1}]},
+            'later': {'sources': [{'path': 'wiki/later.md'}]},
+        }}
+        write_fixture(self.root, 'wiki/ai-context.json', json.dumps(config))
+        write_fixture(self.root, 'wiki/later.md', '---\ndescription: Later topic\n---\n')
+        result = run_router(self.script, 'list')
+        self.assertEqual((result.returncode, result.stderr, result.stdout),
+                         (0, '', f'{"guide":18} \n{"later":18} Later topic\n'))
+
     def test_scalar_forms(self):
         for scalar, expected in [
                 ('Value # comment', 'Value'), ('Value#part', 'Value#part'),

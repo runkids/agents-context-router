@@ -440,7 +440,7 @@ def topic_description(topic, root):
         return ''
     try:
         return page_description(source_lines(sources[0], root, PhysicalPath(root)))
-    except (OSError, ValueError, TypeError, KeyError):
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
         return ''
 
 
