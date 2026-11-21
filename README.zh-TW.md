@@ -208,6 +208,8 @@ wiki/README.md            給人看的 topic 與歷史索引
 
 如果主題頁面用「文字即根目錄路徑」的連結列出路徑（例如 `[docs/run.md](../docs/run.md)`），可在設定檔頂層設定 `"compactPathLinks": true`，讓每個連結只輸出一次，寫成 `` `docs/run.md` ``。只有解析器認定為連結的一般相對路徑會改變；其他連結、程式碼和頁面本身維持不變。`check` 仍會驗證所有連結，並以精簡後的輸出計算位元組預算。預設值為 `false`。掛載主題輸出的精簡路徑相對於外層根目錄，但各掛載的預算仍依其自身的原生路徑計算。
 
+主題可以省略 `description`。省略時，`list` 會顯示該主題第一個來源頁面 frontmatter 中的 `description:` 行，因此 OKF wiki 只需在頁面裡寫一次摘要。只讀取已閉合的開頭 frontmatter 中的單行值，不解析其他 YAML。設定檔中的描述仍然優先；兩者都沒有時，描述顯示為空。
+
 ## 參與貢獻
 
 歡迎提出 Issue 和 Pull Request。Skill 工作流程和 eval prompts 位於 [`skills/agents-context-router/`](skills/agents-context-router/)。
