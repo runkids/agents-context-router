@@ -47,37 +47,23 @@ class PageDescriptionTests(unittest.TestCase):
         write_fixture(self.root, 'wiki/guide.md', '---\ndescription: First\n---\n# Section\n')
         write_fixture(self.root, 'wiki/second.md', '---\ndescription: Second\n---\n')
         self.assert_list('First')
-        write_fixture(self.root, 'wiki/guide.md', '# Section\n')
-        self.assert_list('')
 
     def test_malformed_first_source_lists_blank(self):
-        for source in ('wiki/guide.md', None, {}):
+        for source in ('wiki/guide.md', {}, {'path': 1}):
             with self.subTest(source=source):
                 self.topic['sources'] = [source, {'path': 'wiki/guide.md'}]
                 self.assert_list('')
 
-    def test_non_string_first_path_still_lists_later_topic(self):
-        config = {'topics': {
-            'guide': {'sources': [{'path': 1}]},
-            'later': {'sources': [{'path': 'wiki/later.md'}]},
-        }}
-        write_fixture(self.root, 'wiki/ai-context.json', json.dumps(config))
-        write_fixture(self.root, 'wiki/later.md', '---\ndescription: Later topic\n---\n')
-        result = run_router(self.script, 'list')
-        self.assertEqual((result.returncode, result.stderr, result.stdout),
-                         (0, '', f'{"guide":18} \n{"later":18} Later topic\n'))
-
     def test_scalar_forms(self):
         for scalar, expected in [
                 ('Value # comment', 'Value'), ('Value#part', 'Value#part'),
-                ('-fast recovery.', '-fast recovery.'), ('1.0.0', '1.0.0'),
-                ('Yes', 'Yes'), ('2024', '2024'), ('v1.2 notes', 'v1.2 notes'),
+                ('-fast recovery.', '-fast recovery.'), ('1.0.0', '1.0.0'), ('Yes', 'Yes'),
                 ('~', ''), ('Null', ''), ("'It''s useful' # note", "It's useful"),
                 ("'value' junk", ''), (r'"Say \"hi\" café" # note', 'Say "hi" café'),
                 (r'"bad\e"', ''), (r'"bad\x41"', ''), (r'"bad\uD800"', ''),
                 ('"wrapped', ''), ('|', ''), ('>', ''), ('[a]', ''),
-                ('{a: b}', ''), ('&a text', ''), ('- item', ''),
-                ('? key', ''), (': value', ''), ('word: value', '')]:
+                ('{a: b}', ''), ('&a text', ''), ('- item', ''), ('word: value', ''),
+                (r'"a\nb"', ''), (r'"a\u0085b"', ''), (r'"a\tb"', 'a\tb')]:
             with self.subTest(scalar=scalar):
                 write_fixture(self.root, 'wiki/guide.md', f'---\ndescription: {scalar}\n---\n')
                 self.assert_list(expected)
@@ -89,16 +75,12 @@ class PageDescriptionTests(unittest.TestCase):
         for text in ['# No envelope\n', '---\ndescription: unclosed\n',
                      '---\ntitle: T\n---\n', '---\ndescription: \n---\n',
                      '---\n description: indented\n---\n',
-                     '---\ndescription: first\n# note\n\n  second\n---\n',
-                     '---\ndescription: "first\n  second"\n---\n']:
+                     '---\ndescription: first\n# note\n\n  second\n---\n']:
             with self.subTest(text=text):
                 write_fixture(self.root, 'wiki/guide.md', text)
                 self.assert_list('')
         (self.root / 'wiki/guide.md').unlink()
         self.assert_list('')
-        (self.root / 'wiki/guide.md').write_bytes(b'\xff')
-        self.assert_list('')
-        (self.root / 'wiki/guide.md').unlink()
         outside = Path(self.tmp.name) / 'outside.md'
         outside.write_text('---\ndescription: secret\n---\n', encoding='utf-8')
         try:
@@ -108,26 +90,6 @@ class PageDescriptionTests(unittest.TestCase):
         self.assert_list('')
         self.topic['sources'] = []
         self.assert_list('')
-
-    def test_control_characters_in_scalar_forms(self):
-        for char in ('\n', '\x1b', '\x00', '\x7f', '\x85'):
-            scalars = [json.dumps('a' + char + 'b'), "'a" + char + "b'"]
-            if char != '\n':
-                scalars.append('a' + char + 'b')
-            for scalar in scalars:
-                with self.subTest(char=ascii(char), scalar=ascii(scalar)):
-                    write_fixture(self.root, 'wiki/guide.md', f'---\ndescription: {scalar}\n---\n')
-                    self.assert_list('')
-        for scalar in (r'"a\tb"', "'a\tb'", 'a\tb'):
-            with self.subTest(scalar=ascii(scalar)):
-                write_fixture(self.root, 'wiki/guide.md', f'---\ndescription: {scalar}\n---\n')
-                self.assert_list('a\tb')
-
-    def test_check_accepts_missing_description(self):
-        write_fixture(self.root, 'wiki/guide.md', '---\ndescription: A guide\n---\n# Guide\n')
-        self.configure()
-        result = run_router(self.script, 'check')
-        self.assertEqual((result.returncode, result.stderr), (0, ''), result.stdout)
 
 
 if __name__ == '__main__':

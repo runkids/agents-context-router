@@ -402,9 +402,7 @@ def page_description(lines):
                 return ''
             break
         value = match.group(1).strip(' \t\r')
-        if not value:
-            return ''
-        if value[0] in "\"'":
+        if value.startswith(('"', "'")):
             if value[0] == '"':
                 try:
                     result, end_value = json.JSONDecoder().raw_decode(value)
@@ -415,8 +413,7 @@ def page_description(lines):
                 if not quoted:
                     return ''
                 result, end_value = quoted.group(1).replace("''", "'"), quoted.end()
-            tail = value[end_value:]
-            if tail and not re.fullmatch(r'[ \t]+(?:#.*)?', tail):
+            if not re.fullmatch(r'(?:[ \t]+(?:#.*)?)?', value[end_value:]):
                 return ''
         else:
             result = re.split(r'[ \t]+#', value, maxsplit=1)[0].strip()
@@ -425,8 +422,7 @@ def page_description(lines):
                     or re.search(r':(?:[ \t]|$)', result)
                     or result.lower() in ('~', 'null')):
                 return ''
-        if any((ord(char) < 0x20 and char != '\t') or 0x7f <= ord(char) <= 0x9f
-               or 0xd800 <= ord(char) <= 0xdfff for char in result):
+        if any(unicodedata.category(c) in ('Cc', 'Cs') and c != '\t' for c in result):
             return ''
         return result
     return ''
@@ -435,12 +431,9 @@ def page_description(lines):
 def topic_description(topic, root):
     if 'description' in topic:
         return topic['description']
-    sources = topic.get('sources', [])
-    if not sources:
-        return ''
     try:
-        return page_description(source_lines(sources[0], root, PhysicalPath(root)))
-    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return page_description(source_lines(topic['sources'][0], root, PhysicalPath(root)))
+    except (OSError, ValueError, TypeError, LookupError, AttributeError):
         return ''
 
 
