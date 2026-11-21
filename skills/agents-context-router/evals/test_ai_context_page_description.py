@@ -50,6 +50,12 @@ class PageDescriptionTests(unittest.TestCase):
         write_fixture(self.root, 'wiki/guide.md', '# Section\n')
         self.assert_list('')
 
+    def test_malformed_first_source_lists_blank(self):
+        for source in ('wiki/guide.md', None, {}):
+            with self.subTest(source=source):
+                self.topic['sources'] = [source, {'path': 'wiki/guide.md'}]
+                self.assert_list('')
+
     def test_scalar_forms(self):
         for scalar, expected in [
                 ('Value # comment', 'Value'), ('Value#part', 'Value#part'),
