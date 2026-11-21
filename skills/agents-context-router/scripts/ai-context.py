@@ -10,6 +10,8 @@ envelope from heading discovery; whole-file output and default behavior stay unc
 check also fails on orphans, so docs cannot silently drift out of the router:
 wiki pages no topic loads, history files missing from the router index, and
 nested AGENTS.md files no topic loads, opted-in indexed pages no instructions name, and relative Markdown links are checked.
+Set "okfReservedPages" to true to exempt index.md and log.md under the wiki
+from orphan checks; relative links in those pages are still checked.
 Mounted roots have independent topic namespaces and configs; check excludes
 their subtrees from the outer wiki scan and checks each root separately.
 List bulky trees that hold no instructions under "skipDirs" (exact paths or
@@ -286,7 +288,7 @@ def mount_entries(cfg, root=None):
 
 
 def validate_defaults(cfg):
-    for field in ('stripFrontmatter', 'compactPathLinks'):
+    for field in ('stripFrontmatter', 'compactPathLinks', 'okfReservedPages'):
         if not isinstance(cfg.get(field, False), bool):
             raise ValueError(f'{field}: expected a boolean')
 
@@ -584,6 +586,7 @@ def orphans(cfg, reference_text='', root=None, excluded_roots=(), scope=None):
     if skip_dirs is None:
         return ['skipDirs: expected a list of strings']
     wiki = cfg.get('wikiDir', 'wiki')
+    okf = cfg.get('okfReservedPages', False)
     history = cfg.get('historyDir', f'{wiki}/history')
     router = cfg.get('routerFile', f'{wiki}/README.md')
     root_file = cfg.get('rootInstructions', 'AGENTS.md')
@@ -642,6 +645,8 @@ def orphans(cfg, reference_text='', root=None, excluded_roots=(), scope=None):
                 continue
             # Membership and exemptions follow the scanned path, not its target.
             if root is not None and scanned in exemptions:
+                continue
+            if okf and f in ('index.md', 'log.md') and wiki_path(scanned, wiki, root=root):
                 continue
             if scanned.startswith(history + '/') or (root is not None and history == '.'):
                 if not history_indexed(path, rel, wiki, router_text, cfg, root=root):

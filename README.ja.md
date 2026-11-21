@@ -159,6 +159,8 @@ AI_CONTEXT_ROOT=/work/repo AI_CONTEXT_CONFIG=/work/settings/router.json \
 
 意図的にルーティングしないファイルは、理由を添えて `"unrouted"` に完全一致のパスまたは fnmatch の glob として指定します。たとえば、`"projects/*/AGENTS.md": "Agents load these scoped instructions by cwd."` は該当ファイルを検査対象から除外します。照合では大文字と小文字を区別し、キー内のバックスラッシュは `/` に正規化されます。`*`、`?`、角括弧の文字クラスは Python の fnmatch の仕様に従います。`*` は `/` をまたぐため、この例は `projects/team/api/AGENTS.md` にも一致します。`**` に特別な再帰の意味はありません。ファイルの存在に関係なく、キーは自身に一致し、同時にパターンとしても働きます。`wiki/file[1].md` は自身と `wiki/file1.md` の両方を除外します。`wiki/file1.md` を除外せずに、角括弧を文字どおり含むファイル名を除外するには、`wiki/file[[]1].md` を使います。一致しない未ルーティングのファイルがあれば、引き続き `check` は失敗します。
 
+OKF 形式の wiki では、設定ファイルのトップレベルに `"okfReservedPages": true` を書くと、予約ページの `index.md` と `log.md`（完全一致の名前、wiki 配下の任意の階層）を、孤立ページとして `check` が報告しなくなります。その中のリンクは引き続き検査されます。既定値は `false` です。
+
 生成物や証跡のダンプなど、指示を含まない大きなツリーは `"skipDirs": ["projects/*/artifacts"]`（デフォルト `[]`）で `check` の走査対象から外せます。各要素はリポジトリ相対のディレクトリの完全一致パス、または大文字と小文字を区別する fnmatch の glob で、`"unrouted"` のキーと同じように照合されます（`*` は `/` をまたぎます）。一致したディレクトリには `check` が入らないため、トピックのソースや明示したルーター索引でない限り、その中のページは孤立、indexed、リンクの検査対象になりません。各所有ルートの wiki は走査されますが、マウントのツリーは外側の走査から除外され、独自に検査されます。
 
 複数のトピックを一度に読み込むときは、`python3 scripts/ai-context.py --dedupe <topic> <topic>` で完全に同一のソースを 1 回だけ出力できます。最初に現れた位置とソースのマーカーは維持されます。通常の出力、単一トピックの出力、`check` によるトピックごとの上限は変わりません。詳細と制限は[英語版の説明](README.md#combining-topics-without-repeating-exact-sources)を参照してください。

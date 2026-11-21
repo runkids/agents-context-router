@@ -109,6 +109,8 @@ For a heading source, `"frontmatter": true` skips a closed leading envelope; def
 
 Top-level `"compactPathLinks": true` prints a plain link whose text is its target's root-relative path, like `[docs/run.md](../docs/run.md)`, as `` `docs/run.md` `` in output and budgets; `check` still validates it. Mounted output paths are relative to the outer root; mounted budgets stay native.
 
+Top-level `"okfReservedPages": true` exempts OKF `index.md`/`log.md` at any depth from orphan checks, not link checks.
+
 ## What check enforces
 
 - Every configured content path stays inside its owning root and exists, and every heading matches exactly once.
