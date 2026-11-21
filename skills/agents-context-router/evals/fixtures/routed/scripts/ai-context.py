@@ -395,7 +395,6 @@ def page_description(lines):
         match = re.match(r'^description:[ \t]+(.*)$', lines[index])
         if not match:
             continue
-        # An indented next content line makes this a multiline scalar (or invalid).
         for following in lines[index + 1:end - 1]:
             if not following.strip() or following.lstrip().startswith('#'):
                 continue
@@ -406,61 +405,25 @@ def page_description(lines):
         if not value:
             return ''
         if value[0] in "\"'":
-            quote = value[0]
-            result = []
-            i = 1
-            escapes = {'0': '\0', 'a': '\a', 'b': '\b', 't': '\t',
-                       '\t': '\t', 'n': '\n', 'v': '\v', 'f': '\f',
-                       'r': '\r', 'e': '\x1b', ' ': ' ', '"': '"',
-                       '/': '/', '\\': '\\', 'N': '\x85', '_': '\xa0',
-                       'L': '\u2028', 'P': '\u2029'}
-            while i < len(value):
-                char = value[i]
-                if char == quote:
-                    if quote == "'" and i + 1 < len(value) and value[i + 1] == "'":
-                        result.append("'")
-                        i += 2
-                        continue
-                    tail = value[i + 1:]
-                    if tail and not re.fullmatch(r'[ \t]+(?:#.*)?', tail):
-                        return ''
-                    return ''.join(result)
-                if quote == '"' and char == '\\':
-                    i += 1
-                    if i == len(value):
-                        return ''
-                    char = value[i]
-                    if char in escapes:
-                        result.append(escapes[char])
-                    elif char in 'xuU':
-                        count = {'x': 2, 'u': 4, 'U': 8}[char]
-                        digits = value[i + 1:i + 1 + count]
-                        if len(digits) != count or not re.fullmatch(r'[0-9a-fA-F]+', digits):
-                            return ''
-                        code = int(digits, 16)
-                        if code > 0x10ffff or 0xd800 <= code <= 0xdfff:
-                            return ''
-                        result.append(chr(code))
-                        i += count
-                    else:
-                        return ''
-                else:
-                    if (ord(char) < 0x20 and char != '\t') or char in '\x85\u2028\u2029':
-                        return ''
-                    result.append(char)
-                i += 1
-            return ''
-        # Indicators and implicit non-string scalars do not describe a string.
-        if value[0] in '-?:,[]{}#&*!|>%@`':
-            return ''
-        value = re.split(r'[ \t]+#', value, maxsplit=1)[0].rstrip(' \t')
-        if (not value or re.search(r':(?:[ \t]|$)', value)
-                or any((ord(char) < 0x20 and char != '\t') or char in '\x85\u2028\u2029'
-                       for char in value)
-                or re.fullmatch(r'(?i:null|~|true|false|yes|no|on|off|'
-                                r'[-+]?(?:[0-9][0-9_:.eE+-]*|0x[0-9a-f_]+|'
-                                r'0b[01_]+|0o[0-7_]+|\.[0-9][0-9_eE+-]*|\.inf|\.nan))', value)
-                or re.match(r'^\d{4}-\d\d-\d\d(?:$|[Tt \t])', value)):
+            if value[0] == '"':
+                try:
+                    result, end_value = json.JSONDecoder().raw_decode(value)
+                except ValueError:
+                    return ''
+                if any(0xd800 <= ord(char) <= 0xdfff for char in result):
+                    return ''
+            else:
+                quoted = re.match(r"'((?:[^']|'')*)'", value)
+                if not quoted:
+                    return ''
+                result, end_value = quoted.group(1).replace("''", "'"), quoted.end()
+            tail = value[end_value:]
+            return result if not tail or re.fullmatch(r'[ \t]+(?:#.*)?', tail) else ''
+        value = re.split(r'[ \t]+#', value, maxsplit=1)[0].strip()
+        if (not value or value[0] in '[]{},#&*!|>%@`'
+                or re.match(r'^[-?:](?:[ \t]|$)', value)
+                or re.search(r':(?:[ \t]|$)', value)
+                or value.lower() in ('~', 'null')):
             return ''
         return value
     return ''
@@ -470,7 +433,7 @@ def topic_description(topic, root):
     if 'description' in topic:
         return topic['description']
     sources = topic.get('sources', [])
-    if not sources or 'heading' in sources[0]:
+    if not sources:
         return ''
     try:
         return page_description(source_lines(sources[0], root, PhysicalPath(root)))
