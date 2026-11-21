@@ -101,8 +101,8 @@ After a change, render the affected topics and review their claims against those
 ## Adding or changing a topic
 
 1. Put the content in `wiki/<page>.md`. A topic should be a recognizable kind of work, not a single ticket or file.
-2. Map it in the active config. Reference exact headings for large pages. Without `description`, `list` shows the first source's frontmatter `description:` (one line or blank).
-3. Add a row to this root's local topic tables in `AGENTS.md` and `wiki/README.md`; mounted topics belong to their owner's tables.
+2. Map it in the active config. Reference exact headings for large pages. Without `description`, `list` shows the first source's frontmatter `description:` (one line or blank). Every router copy reading the config, an outer mounting one included, must be this version first.
+3. Add a row to this root's local topic tables in `AGENTS.md` and `wiki/README.md`.
 4. Run `python3 scripts/ai-context.py check`, then render the topic and read it as an agent would.
 
 For a heading source, `"frontmatter": true` skips a closed leading envelope; default/false keeps legacy behavior. First line must be `---` (optional BOM); closure is column-zero `---` or `...`. Trailing spaces/tabs are allowed. No YAML validation occurs, except `list` reading `description:`. No closer means legacy headings. Whole-file output is unchanged unless `stripFrontmatter` (source, or top-level default; source wins) is true: it drops a closed leading envelope from output and budgets and makes headings frontmatter-aware. Sections add no metadata. Detection reads delimiters only: a page starting `---`, `Intro`, `---` (a rule, then a setext heading) loses `Intro`. Under a top-level default, give such a page `"stripFrontmatter": false`.
@@ -127,7 +127,7 @@ Optional `"indexed"` patterns (default `[]`) check discovery of `.md` pages acro
 
 An indexed page must be a topic source, including a heading-selected source, or have its full repo-relative path named in root instructions, the configured router file, or a topic's successfully rendered text. Only selected sections count, and a basename or relative link without the full string does not. Fix a failure by naming the path in a topic page, routing the page as a source, or listing an exact path or matching case-sensitive glob under `"unrouted"` with a nonblank string reason. If multiple exceptions match, any nonblank string reason exempts the page from the indexed check. Blank or non-string reasons still exempt legacy orphans, but do not satisfy an indexed check. These references do not exempt pages from the existing wiki, history, or nested-instructions rules.
 
-Optional `"skipDirs"` (default `[]`) keeps `check` out of bulky trees that hold no instructions, such as generated output or evidence dumps: exact repo-relative directory paths or case-sensitive fnmatch globs, matched like `"unrouted"` keys. Pages inside a skipped directory are checked only when a topic routes them or the path is the explicit router file. The owner's wiki is always walked except for mounted trees, which get their own checks as described above.
+Optional `"skipDirs"` (default `[]`) keeps `check` out of bulky trees that hold no instructions, such as generated output or evidence dumps: exact repo-relative directory paths or case-sensitive fnmatch globs, matched like `"unrouted"` keys. Pages inside a skipped directory are checked only when a topic routes them or the path is the explicit router file. The owner's wiki is always walked except for mounted trees.
 
 `check` runs in CI to catch structural drift. Passing does not establish factual accuracy, policy compliance, freshness or complete task coverage; the targeted review above is still needed.
 
