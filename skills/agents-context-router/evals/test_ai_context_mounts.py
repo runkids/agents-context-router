@@ -119,6 +119,15 @@ class MountRoutingTests(MountFixture):
         checked = self.cli('check')
         self.assertEqual((checked.returncode, checked.stderr), (0, ''), checked.stdout)
 
+    def test_list_missing_mounted_page_description_is_blank(self):
+        del self.inner_cfg['topics']['guide']['description']
+        (self.module_root / 'wiki/guide.md').unlink()
+        self.save_configs()
+        result = self.cli('list')
+        self.assertEqual((result.returncode, result.stderr), (0, ''))
+        self.assertEqual(result.stdout.splitlines(), [f'{"guide":18} Project guide',
+                         f'{"kb/guide":18}  [modules/kb-core]'])
+
     def test_list_and_mixed_render(self):
         # Dropping mounts or using the outer cfg/body must fail these literals.
         local = '<!-- wiki/guide.md -->\n# Guide\nLocal.'
