@@ -107,6 +107,18 @@ class MountFixture(unittest.TestCase):
 
 
 class MountRoutingTests(MountFixture):
+    def test_list_uses_mounted_page_description(self):
+        del self.inner_cfg['topics']['guide']['description']
+        self.write('wiki/guide.md', '---\ndescription: Outer page\n---\n# Guide\n')
+        self.write('modules/kb-core/wiki/guide.md', '---\ndescription: Inner page\n---\n# Guide\n')
+        self.save_configs()
+        result = self.cli('list')
+        self.assertEqual((result.returncode, result.stderr), (0, ''))
+        self.assertEqual(result.stdout.splitlines(), [f'{"guide":18} Project guide',
+                         f'{"kb/guide":18} Inner page [modules/kb-core]'])
+        checked = self.cli('check')
+        self.assertEqual((checked.returncode, checked.stderr), (0, ''), checked.stdout)
+
     def test_list_and_mixed_render(self):
         # Dropping mounts or using the outer cfg/body must fail these literals.
         local = '<!-- wiki/guide.md -->\n# Guide\nLocal.'
@@ -397,7 +409,7 @@ class MountDeclarationTests(MountFixture):
         # healthy-root continuation have separate list/check handoff cases.
         cases = [(None, 'config'), ([], 'config'), ({}, 'topics'),
                  ({'topics': []}, 'topics'), ({'topics': {'': {}}}, 'topics')]
-        for field, value in [('description', 1), ('sources', {}), ('sources', [None]),
+        for field, value in [('description', 1), ('description', None), ('sources', {}), ('sources', [None]),
                              ('sources', [{'path': ''}]), ('sources', [{'path': 1}]),
                              ('sources', [{}]), ('sources', [{'path': 'wiki/guide.md', 'heading': 1}])]:
             cfg = copy.deepcopy(original)
