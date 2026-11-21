@@ -646,7 +646,7 @@ def orphans(cfg, reference_text='', root=None, excluded_roots=(), scope=None):
             # Membership and exemptions follow the scanned path, not its target.
             if root is not None and scanned in exemptions:
                 continue
-            if okf and f in ('index.md', 'log.md'):
+            if okf and f in ('index.md', 'log.md') and wiki_path(scanned, wiki, root=root):
                 continue
             if scanned.startswith(history + '/') or (root is not None and history == '.'):
                 if not history_indexed(path, rel, wiki, router_text, cfg, root=root):

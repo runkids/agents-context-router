@@ -23,7 +23,6 @@ class OkfReservedTests(unittest.TestCase):
         shutil.copy2(SCRIPT, self.script)
         self.cfg = self.config()
         self.write_root('')
-        write_fixture(self.root, 'index.md', '---\nokf_version: 1\n---\n# Bundle\n')
 
     @staticmethod
     def config():
@@ -39,49 +38,55 @@ class OkfReservedTests(unittest.TestCase):
         write_fixture(self.root, 'wiki/ai-context.json', json.dumps(self.cfg))
         return run_router(self.script, 'check')
 
-    def test_reserved_pages_require_explicit_opt_in(self):
-        for name in ('index.md', 'log.md'):
-            write_fixture(self.root, 'wiki/' + name, '# Reserved\n')
-        for setting in (None, False):
+    def test_reserved_pages_require_opt_in_and_exact_names(self):
+        reserved = ('index.md', 'log.md', 'area/index.md', 'area/log.md')
+        for name in reserved:
+            write_fixture(self.root, 'wiki/' + name, '# Page\n')
+        for setting in (None, False, True):
             with self.subTest(setting=setting):
                 if setting is None:
                     self.cfg.pop('okfReservedPages', None)
                 else:
                     self.cfg['okfReservedPages'] = setting
                 result = self.check()
-                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-                for name in ('index.md', 'log.md'):
-                    self.assertIn('wiki/' + name + ': wiki page no topic loads', result.stdout)
-        self.cfg['okfReservedPages'] = True
-        result = self.check()
-        self.assertEqual((result.returncode, result.stderr), (0, ''), result.stdout)
-
-    def test_exact_names_at_any_wiki_depth(self):
-        self.cfg['okfReservedPages'] = True
-        for name in ('area/index.md', 'area/log.md', 'area/other.md', 'Index.md',
-                     'index.md.bak', 'index.md.bak.md'):
+                self.assertEqual(result.returncode, 0 if setting is True else 1, result.stdout)
+                for name in reserved:
+                    message = 'wiki/' + name + ': wiki page no topic loads'
+                    self.assertEqual(message in result.stdout, setting is not True)
+        (self.root / 'wiki/index.md').unlink()
+        others = ('area/other.md', 'Index.md', 'index.md.bak.md')
+        for name in others + ('index.md.bak',):
             write_fixture(self.root, 'wiki/' + name, '# Page\n')
         result = self.check()
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        for name in ('area/other.md', 'Index.md', 'index.md.bak.md'):
+        for name in others:
             self.assertIn('wiki/' + name + ': wiki page no topic loads', result.stdout)
         for name in ('area/index.md', 'area/log.md', 'index.md.bak'):
             self.assertNotIn('wiki/' + name + ': wiki page no topic loads', result.stdout)
 
     def test_history_reserved_pages_and_indexed_check(self):
         self.cfg['indexed'] = ['wiki/index.md']
-        write_fixture(self.root, 'wiki/index.md', '# Index\n')
         for name in ('index.md', 'log.md'):
+            write_fixture(self.root, 'wiki/' + name, '# Wiki\n')
             write_fixture(self.root, 'wiki/history/' + name, '# History\n')
-        for enabled in (False, True):
-            with self.subTest(enabled=enabled):
+            write_fixture(self.root, 'archive/' + name, '# History\n')
+        for history, enabled in ((None, False), (None, True), ('archive', True)):
+            with self.subTest(history=history, enabled=enabled):
+                if history is None:
+                    self.cfg.pop('historyDir', None)
+                else:
+                    self.cfg['historyDir'] = history
                 self.cfg['okfReservedPages'] = enabled
                 result = self.check()
                 self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
                 self.assertIn('wiki/index.md: indexed page not named', result.stdout)
                 for name in ('index.md', 'log.md'):
-                    self.assertEqual('wiki/history/' + name + ': history file not indexed' in result.stdout,
+                    self.assertEqual('wiki/' + name + ': wiki page no topic loads' in result.stdout,
                                      not enabled)
+                    self.assertEqual('wiki/history/' + name + ': history file not indexed' in result.stdout,
+                                     history is None and not enabled)
+                    self.assertEqual('archive/' + name + ': history file not indexed' in result.stdout,
+                                     history == 'archive')
 
     def test_links_in_reserved_pages_are_checked(self):
         self.cfg['okfReservedPages'] = True
