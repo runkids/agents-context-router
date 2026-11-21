@@ -223,6 +223,8 @@ To keep page metadata out of printed context and byte budgets, set `"stripFrontm
 
 If topic pages list paths as links whose text is the path from the root, such as `[docs/run.md](../docs/run.md)`, set `"compactPathLinks": true` at the top level of the config to print each one once, as `` `docs/run.md` ``. Only plain relative paths the parser reads as links change; other links, code and the pages themselves stay as they are. `check` still validates every link and budgets the compact output. Default false. For mounted topics, the printed compact paths are relative to the outer root, while each mount's budget counts its own native paths.
 
+A topic may leave out `description`; `list` then shows the one-line frontmatter `description:` of its first source page. It reads a plain, single-quoted or JSON-escaped double-quoted value and lists anything else blank. Upgrade every router copy that reads the config first, including an outer router that mounts it.
+
 ## Contributing
 
 Issues and pull requests are welcome. The skill workflow and eval prompts are in [`skills/agents-context-router/`](skills/agents-context-router/).

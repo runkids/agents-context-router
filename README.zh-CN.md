@@ -208,6 +208,8 @@ wiki/README.md            面向人的 topic 与历史索引
 
 如果主题页面用“文本即根目录路径”的链接列出路径（例如 `[docs/run.md](../docs/run.md)`），可在配置顶层设置 `"compactPathLinks": true`，让每个链接只输出一次，写成 `` `docs/run.md` ``。只有解析器识别为链接的普通相对路径会改变；其他链接、代码和页面本身保持不变。`check` 仍会验证所有链接，并按压缩后的输出计算字节预算。默认值为 `false`。挂载主题输出的精简路径相对于外层根目录，但各挂载的预算仍按其自身的原生路径计算。
 
+主题可以省略 `description`，此时 `list` 会显示第一个来源页面 frontmatter 中的单行 `description:`。它读取无引号、单引号或使用 JSON 转义的双引号值，其他写法显示为空。请先升级读取该配置的每个路由器副本，包括挂载它的外层路由器。
+
 ## 参与贡献
 
 欢迎提交 Issue 和 Pull Request。Skill 工作流程和 eval 提示词位于 [`skills/agents-context-router/`](skills/agents-context-router/)。

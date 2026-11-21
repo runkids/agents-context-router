@@ -208,6 +208,8 @@ wiki/README.md            사람이 읽는 topic 및 기록 목록
 
 토픽 페이지가 루트 기준 경로를 텍스트로 쓴 링크(`[docs/run.md](../docs/run.md)` 등)로 경로를 나열한다면, 설정 파일 최상위에 `"compactPathLinks": true`를 두어 각 링크를 `` `docs/run.md` ``처럼 한 번만 출력할 수 있습니다. 파서가 링크로 읽는 단순 상대 경로만 바뀌고, 다른 링크와 코드, 페이지 자체는 그대로입니다. `check`는 모든 링크를 계속 검증하고 줄어든 출력으로 바이트 예산을 셉니다. 기본값은 `false`입니다. 마운트된 토픽의 출력되는 축약 경로는 바깥쪽 루트를 기준으로 하지만, 마운트의 예산은 각 마운트 고유의 경로로 계산합니다.
 
+토픽의 `description`은 생략할 수 있으며, 그러면 `list`는 첫 번째 소스 페이지 frontmatter의 한 줄짜리 `description:`을 보여 줍니다. 따옴표 없는 값, 작은따옴표 값, JSON 이스케이프를 쓰는 큰따옴표 값을 읽고, 그 밖의 형식은 빈 설명으로 표시합니다. 이 설정을 읽는 모든 라우터 사본(이를 마운트하는 바깥쪽 라우터 포함)을 먼저 업그레이드하세요.
+
 ## 기여
 
 Issue와 Pull Request를 환영합니다. 스킬 절차와 eval 프롬프트는 [`skills/agents-context-router/`](skills/agents-context-router/)에 있습니다.
