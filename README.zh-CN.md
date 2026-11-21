@@ -159,7 +159,7 @@ AI_CONTEXT_ROOT=/work/repo AI_CONTEXT_CONFIG=/work/settings/router.json \
 
 有意保留的未路由文件例外应放在 `"unrouted"` 中，使用精确路径或 fnmatch glob，并为每项提供理由。例如，`"projects/*/AGENTS.md": "Agents load these scoped instructions by cwd."` 会豁免这些文件。匹配区分大小写，键中的反斜杠会规范化为 `/`。`*`、`?` 和方括号字符类遵循 Python fnmatch 语义：`*` 可以跨越 `/`，因此该示例也会匹配 `projects/team/api/AGENTS.md`；`**` 没有特殊的递归含义。无论文件是否存在，键既匹配自身，也作为模式参与匹配：`wiki/file[1].md` 会同时豁免自身和 `wiki/file1.md`。使用 `wiki/file[[]1].md` 可豁免带有字面方括号的文件名，而不会同时豁免 `wiki/file1.md`。未匹配到的未路由文件仍会导致 `check` 失败。
 
-对于 OKF 格式的 wiki，可在配置顶层设置 `"okfReservedPages": true`，让 `check` 不再把保留页面 `index.md` 和 `log.md`（名称精确匹配，位于 wiki 下任意层级）报告为没有 topic 加载的页面。这些页面中的链接仍会检查。默认值为 `false`。
+对于 OKF 格式的 wiki，可在配置顶层设置 `"okfReservedPages": true`，让 `check` 不再把保留页面 `index.md` 和 `log.md`（名称精确匹配，位于 wiki 下任意层级）报告为孤立页面。这些页面中的链接仍会检查。默认值为 `false`。
 
 对于不含指令的大型目录树，例如生成的输出或证据转储，可用 `"skipDirs": ["projects/*/artifacts"]`（默认 `[]`）让 `check` 不再遍历它们。每项是相对仓库的目录精确路径或区分大小写的 fnmatch glob，匹配方式与 `"unrouted"` 的键相同（`*` 可跨越 `/`）。`check` 不会进入匹配的目录，因此除非页面列为 topic 的来源或选作 router 索引，这些页面不会参与孤立页面、indexed 和链接检查。每个根目录的 wiki 都会被遍历，但挂载目录树从外层扫描中排除，并接受独立检查。
 
