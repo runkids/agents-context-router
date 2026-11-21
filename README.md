@@ -223,7 +223,7 @@ To keep page metadata out of printed context and byte budgets, set `"stripFrontm
 
 If topic pages list paths as links whose text is the path from the root, such as `[docs/run.md](../docs/run.md)`, set `"compactPathLinks": true` at the top level of the config to print each one once, as `` `docs/run.md` ``. Only plain relative paths the parser reads as links change; other links, code and the pages themselves stay as they are. `check` still validates every link and budgets the compact output. Default false. For mounted topics, the printed compact paths are relative to the outer root, while each mount's budget counts its own native paths.
 
-A topic may leave out `description`. `list` then shows the `description:` line from the frontmatter of the topic's first source page, so an OKF wiki keeps each summary once, in its page. Only a single-line value in a closed opening envelope counts; no other YAML is parsed. A description in the config still wins, and a topic with neither lists an empty description.
+A topic may leave out `description`. If its first source is a whole page, `list` then shows the `description:` line from that page's closed opening frontmatter, so an OKF wiki keeps each summary once, in its page. The value must be one line, plain, single-quoted or double-quoted; a trailing `# comment` is dropped. Any other form, or a first source with a `heading`, lists an empty description. A description in the config still wins.
 
 ## Contributing
 

@@ -36,7 +36,7 @@ To consume an independent router tree already inside the project, add this optio
 
 The tree must already have its own config with a `topics` object, optional string descriptions and source lists, plus its own instructions and router index.
 
-Each topic's `sources` is a list of objects with a nonempty `path` and optional string `heading` and booleans `frontmatter`, `stripFrontmatter` (default `false`). Optional path settings are nonempty strings, `indexed`/`skipDirs` are string lists, and `unrouted` is an object. Root/default/per-topic byte caps are nonnegative integers, excluding booleans. Ordinary unknown config fields remain accepted; unknown declaration fields do not.
+Each topic's `sources` is a list of objects with a nonempty `path` and optional string `heading` and booleans `frontmatter`, `stripFrontmatter`. Optional path settings are nonempty strings, `indexed`/`skipDirs` are string lists, and `unrouted` is an object. Root/default/per-topic byte caps are nonnegative integers, excluding booleans. Ordinary unknown config fields remain accepted; unknown declaration fields do not.
 
 Select it through the project router:
 
@@ -101,11 +101,11 @@ After a change, render the affected topics and review their claims against those
 ## Adding or changing a topic
 
 1. Put the content in `wiki/<page>.md`. A topic should be a recognizable kind of work, not a single ticket or file.
-2. Map it in the active config. Reference exact headings for large pages. With no `description`, `list` shows the first source page's single-line frontmatter `description:`.
+2. Map it in the active config. Reference exact headings for large pages. With no `description`, `list` shows a whole-page first source's one-line plain or quoted frontmatter `description:`, minus a trailing `# comment`; else empty.
 3. Add a row to this root's local topic tables in `AGENTS.md` and `wiki/README.md`; mounted topics belong to their owner's tables.
 4. Run `python3 scripts/ai-context.py check`, then render the topic and read it as an agent would.
 
-For a heading source, `"frontmatter": true` skips a closed leading envelope; default/false keeps legacy behavior. First line must be `---` (optional BOM); closure is column-zero `---` or `...`. Trailing spaces/tabs are allowed. No YAML validation occurs. No closer means legacy headings. Whole-file output is unchanged unless `stripFrontmatter` (source, or top-level default; source wins) is true: it drops a closed leading envelope from output and budgets and makes headings frontmatter-aware. Sections add no metadata. Detection reads delimiters only: a page starting `---`, `Intro`, `---` (a rule, then a setext heading) loses `Intro`. Under a top-level default, give such a page `"stripFrontmatter": false`.
+For a heading source, `"frontmatter": true` skips a closed leading envelope; default/false keeps legacy behavior. First line must be `---` (optional BOM); closure is column-zero `---` or `...`. Trailing spaces/tabs are allowed. No closer means legacy headings. Whole-file output is unchanged unless `stripFrontmatter` (source, or top-level default; source wins) is true: it drops a closed leading envelope from output and budgets and makes headings frontmatter-aware. Sections add no metadata. Detection reads delimiters only: a page starting `---`, `Intro`, `---` (a rule, then a setext heading) loses `Intro`. Under a top-level default, give such a page `"stripFrontmatter": false`.
 
 Top-level `"compactPathLinks": true` prints a plain link whose text is its target's root-relative path, like `[docs/run.md](../docs/run.md)`, as `` `docs/run.md` `` in output and budgets; `check` still validates it. Mounted output paths are relative to the outer root; mounted budgets stay native.
 
