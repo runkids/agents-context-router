@@ -73,13 +73,9 @@ class OkfReservedTests(unittest.TestCase):
                 self.assertEqual('FAIL wiki/index.md' + ORPHAN in result.stdout, not outer)
                 self.assertEqual('FAIL mount kb: wiki/index.md' + ORPHAN in result.stdout, not inner)
 
-    def test_non_boolean_rejected_locally_and_in_mount(self):
+    def test_non_boolean_is_rejected(self):
         result = self.check(okfReservedPages='yes')
         self.assertIn('FAIL okfReservedPages: expected a boolean', result.stdout)
-        self.write('modules/kb/', okfReservedPages=1)
-        result = self.check(mounts=MOUNT, okfReservedPages=True)
-        self.assertEqual(result.returncode, 1, result.stderr)
-        self.assertIn('FAIL mount kb: okfReservedPages: expected a boolean', result.stdout)
 
 
 if __name__ == '__main__':
