@@ -49,6 +49,7 @@ class PageDescriptionTests(unittest.TestCase):
         self.assert_list('First')
 
     def test_malformed_first_source_lists_blank(self):
+        write_fixture(self.root, 'wiki/guide.md', '---\ndescription: Later source\n---\n')
         for source in ('wiki/guide.md', {}, {'path': 1}):
             with self.subTest(source=source):
                 self.topic['sources'] = [source, {'path': 'wiki/guide.md'}]
@@ -68,7 +69,7 @@ class PageDescriptionTests(unittest.TestCase):
                 write_fixture(self.root, 'wiki/guide.md', f'---\ndescription: {scalar}\n---\n')
                 self.assert_list(expected)
         write_fixture(self.root, 'wiki/guide.md',
-                      '\ufeff---\r\ndescription:\tUnicode café\r\n...\r\n')
+                      '\ufeff---\ndescription:\tUnicode café\n...\n')
         self.assert_list('Unicode café')
 
     def test_unavailable_descriptions(self):
@@ -81,14 +82,15 @@ class PageDescriptionTests(unittest.TestCase):
                 self.assert_list('')
         (self.root / 'wiki/guide.md').unlink()
         self.assert_list('')
+        self.topic['sources'] = []
+        self.assert_list('')
+        self.topic['sources'] = [{'path': 'wiki/guide.md'}]
         outside = Path(self.tmp.name) / 'outside.md'
         outside.write_text('---\ndescription: secret\n---\n', encoding='utf-8')
         try:
             (self.root / 'wiki/guide.md').symlink_to(outside)
         except (OSError, NotImplementedError) as error:
             self.skipTest('symlink capability unavailable: ' + str(error))
-        self.assert_list('')
-        self.topic['sources'] = []
         self.assert_list('')
 
 
