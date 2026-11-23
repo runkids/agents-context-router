@@ -204,7 +204,7 @@ wiki/README.md            給人看的 topic 與歷史索引
 
 隨附腳本只使用 Python 標準函式庫（Python 3.8+）。範例使用 `python3`；Windows 請改用 `python` 或 `py -3`。skill 會在安裝 router 時選擇合適的指令。標題引用必須精確比對；若標題不存在或重複，檢查就會失敗，避免標題改名後悄悄載入錯誤內容。
 
-在指定標題的來源上設定 `"frontmatter": true`，標題選取才會略過文件開頭已閉合的 frontmatter（從 `---` 到 `---` 或 `...`），但不驗證 YAML 是否有效。省略或設為 `false` 時保留原有標題行為。整頁來源保留該內容；沒有閉合分隔符時保留原有 Markdown 行為。精確邊界規則見維護指南。這不是 OKF 驗證器，也不會額外輸出中繼資料。
+在指定標題的來源上設定 `"frontmatter": true`，標題選取才會略過文件開頭已閉合的 frontmatter（從 `---` 到 `---` 或 `...`），但不驗證 YAML 是否有效。省略或設為 `false`（且未設定 `stripFrontmatter`）時，frontmatter 裡的標題仍會被比對。整頁來源保留 frontmatter；沒有閉合分隔符時，開頭的 `---` 視為一般 Markdown。精確邊界規則見維護指南。這不是 OKF 驗證器，也不會額外輸出中繼資料。
 
 若要讓頁面中繼資料不進入輸出和位元組預算，可在來源上設定 `"stripFrontmatter": true`，或在設定檔頂層設定一次，作為所有來源的預設值（來源上的值優先）。整頁來源會從輸出中移除開頭已閉合的 frontmatter，指定標題的來源則像 `"frontmatter": true` 一樣略過它。省略或設為 `false` 時不做任何改變；未閉合的 frontmatter 保持原樣。`check` 依移除後的輸出計算位元組數。
 
