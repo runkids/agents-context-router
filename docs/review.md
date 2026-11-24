@@ -1,3 +1,10 @@
+---
+type: Guide
+title: Change review
+description: Which files to check together and which commands to run when reviewing a change to agents-context-router.
+generated: { by: claude-code/claude-opus-5-5, at: "2026-11-24T16:01:36Z" }
+---
+
 # Change review
 
 Use the project skill `agents-context-router-code-review` before committing or

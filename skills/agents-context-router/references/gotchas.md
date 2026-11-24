@@ -1,3 +1,10 @@
+---
+type: Reference
+title: Gotchas
+description: Traps that make an agent-docs split lose content or route agents to the wrong text, each with why it matters.
+generated: { by: claude-code/claude-opus-5-5, at: "2026-11-24T16:01:36Z" }
+---
+
 # Gotchas
 
 Each item below is a trap that makes a split lose content or route agents to the wrong text. Each one says why it matters.
