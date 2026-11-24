@@ -64,7 +64,9 @@ class PageDescriptionTests(unittest.TestCase):
                 (r'"bad\e"', ''), (r'"bad\x41"', ''), (r'"bad\uD800"', ''),
                 ('"wrapped', ''), ('|', ''), ('>', ''), ('[a]', ''),
                 ('{a: b}', ''), ('&a text', ''), ('- item', ''), ('word: value', ''),
-                (r'"a\nb"', ''), (r'"a\u0085b"', ''), (r'"a\tb"', 'a\tb')]:
+                (r'"a\nb"', ''), (r'"a\u0085b"', ''), (r'"a\tb"', 'a\tb'),
+                ('Value\u0085', ''), ('\x0cValue', ''), (r'"line\u2028break"', ''),
+                ("'a\u2029b'", ''), ('Value\u2028', ''), ('Value\u00a0', 'Value\u00a0')]:
             with self.subTest(scalar=scalar):
                 write_fixture(self.root, 'wiki/guide.md', f'---\ndescription: {scalar}\n---\n')
                 self.assert_list(expected)

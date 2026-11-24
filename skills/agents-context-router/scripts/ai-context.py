@@ -416,13 +416,13 @@ def page_description(lines):
             if not re.fullmatch(r'(?:[ \t]+(?:#.*)?)?', value[end_value:]):
                 return ''
         else:
-            result = re.split(r'[ \t]+#', value, maxsplit=1)[0].strip()
+            result = re.split(r'[ \t]+#', value, maxsplit=1)[0].strip(' \t')
             if (not result or result[0] in '[]{},#&*!|>%@`'
                     or re.match(r'^[-?:](?:[ \t]|$)', result)
                     or re.search(r':(?:[ \t]|$)', result)
                     or result.lower() in ('~', 'null')):
                 return ''
-        if any(unicodedata.category(c) in ('Cc', 'Cs') and c != '\t' for c in result):
+        if any(unicodedata.category(c) in ('Cc', 'Cs', 'Zl', 'Zp') and c != '\t' for c in result):
             return ''
         return result
     return ''
