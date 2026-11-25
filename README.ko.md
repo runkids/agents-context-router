@@ -159,6 +159,8 @@ AI_CONTEXT_ROOT=/work/repo AI_CONTEXT_CONFIG=/work/settings/router.json \
 
 의도적으로 라우팅하지 않는 파일은 이유와 함께 `"unrouted"`에 정확한 경로 또는 fnmatch glob으로 지정합니다. 예를 들어 `"projects/*/AGENTS.md": "Agents load these scoped instructions by cwd."`는 해당 파일을 검사 대상에서 제외합니다. 일치는 대소문자를 구분하며, 키 안의 백슬래시는 `/`로 정규화됩니다. `*`, `?`, 대괄호 문자 클래스는 Python fnmatch의 의미를 따릅니다. `*`는 `/`를 넘어서도 일치하므로 이 예시는 `projects/team/api/AGENTS.md`에도 일치합니다. `**`에는 특별한 재귀 의미가 없습니다. 파일의 존재 여부와 관계없이 키는 자기 자신과 일치하면서 패턴으로도 작동합니다. `wiki/file[1].md`는 자신과 `wiki/file1.md`를 모두 제외합니다. `wiki/file1.md`를 제외하지 않고 대괄호가 문자 그대로 포함된 파일 이름을 제외하려면 `wiki/file[[]1].md`를 사용하세요. 일치하지 않는 미라우팅 파일이 있으면 여전히 `check`가 실패합니다.
 
+OKF 형식 wiki에서는 설정 파일 최상위에 `"okfReservedPages": true`를 두면 예약 페이지인 `index.md`와 `log.md`(정확한 이름, wiki 아래 모든 깊이)를 고아 페이지로 `check`가 보고하지 않습니다. 그 안의 링크는 계속 검사합니다. 기본값은 `false`입니다.
+
 생성된 출력물이나 증거 덤프처럼 지침이 없는 큰 트리는 `"skipDirs": ["projects/*/artifacts"]`(기본값 `[]`)로 `check`의 탐색에서 제외할 수 있습니다. 각 항목은 저장소 기준 디렉터리의 정확한 경로이거나 대소문자를 구분하는 fnmatch glob이며, `"unrouted"` 키와 같은 방식으로 일치시킵니다(`*`는 `/`를 넘어 일치합니다). `check`는 일치하는 디렉터리에 들어가지 않으므로, topic 소스나 명시한 router 색인이 아닌 한 그 안의 페이지는 고아, indexed, 링크 검사를 받지 않습니다. 각 소유 루트의 wiki는 탐색하지만 마운트 트리는 바깥쪽 탐색에서 제외하고 독립적으로 검사합니다.
 
 여러 topic을 한 번에 불러올 때 `python3 scripts/ai-context.py --dedupe <topic> <topic>`을 사용하면 완전히 동일한 소스를 한 번만 출력합니다. 처음 나온 위치와 소스 표시는 그대로 유지됩니다. 기본 출력, 단일 topic 출력, `check`의 topic별 한도는 바뀌지 않습니다. 자세한 내용과 제한은 [영문 설명](README.md#combining-topics-without-repeating-exact-sources)을 참고하세요.
@@ -202,7 +204,7 @@ wiki/README.md            사람이 읽는 topic 및 기록 목록
 
 포함된 스크립트는 Python 표준 라이브러리만 사용합니다(Python 3.8 이상).예시는 `python3`를 사용합니다. Windows에서는 `python` 또는 `py -3`를 사용하세요. 스킬이 라우터를 설치할 때 알맞은 명령을 고릅니다. 제목을 정확히 참조하며, 제목이 없거나 중복되면 실패하므로 제목이 바뀐 뒤 잘못된 지침이 조용히 로드되지 않습니다.
 
-제목을 지정한 소스에 `"frontmatter": true`를 설정하면 문서 시작의 닫힌 frontmatter(`---`부터 `---` 또는 `...`까지)를 건너뛰며 YAML 유효성을 검사하지 않습니다.생략하거나 `false`이면 기존 제목 동작을 유지합니다. 전체 페이지 소스는 이를 유지하고, 닫는 구분자가 없으면 기존 Markdown 동작을 유지합니다. 정확한 경계 규칙은 관리 가이드를 참고하세요. OKF 검증이나 메타데이터 추가 출력 기능은 아닙니다.
+제목을 지정한 소스에 `"frontmatter": true`를 설정하면 문서 시작의 닫힌 frontmatter(`---`부터 `---` 또는 `...`까지)를 건너뛰며 YAML 유효성을 검사하지 않습니다. 생략하거나 `false`이면(`stripFrontmatter`도 설정하지 않은 경우) frontmatter 안의 제목도 매칭 대상입니다. 전체 페이지 소스는 frontmatter를 유지하고, 닫는 구분자가 없으면 시작 부분의 `---`는 일반 Markdown으로 처리합니다. 정확한 경계 규칙은 관리 가이드를 참고하세요. OKF 검증이나 메타데이터 추가 출력 기능은 아닙니다.
 
 페이지 메타데이터를 출력과 바이트 예산에서 빼려면 소스에 `"stripFrontmatter": true`를 설정하거나, 설정 파일 최상위에 한 번 지정해 모든 소스의 기본값으로 쓰세요(소스 값이 우선). 전체 페이지 소스에서는 문서 시작의 닫힌 frontmatter를 출력에서 제거하고, 제목 소스에서는 `"frontmatter": true`처럼 이를 건너뜁니다. 생략하거나 `false`이면 아무것도 바뀌지 않으며, 닫히지 않은 frontmatter는 그대로 남습니다. `check`는 제거된 출력으로 바이트를 계산합니다.
 
