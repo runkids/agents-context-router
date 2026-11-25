@@ -101,7 +101,7 @@ After a change, render the affected topics and review their claims against those
 ## Adding or changing a topic
 
 1. Put the content in `wiki/<page>.md`. A topic should be a recognizable kind of work, not a single ticket or file.
-2. Map it in the active config. Reference exact headings for large pages. Without `description`, `list` shows the first source page's one-line frontmatter `description:`, else blank. Upgrade every router copy first.
+2. Map it in the active config. Reference exact headings for large pages.
 3. Add a row to this root's local topic tables in `AGENTS.md` and `wiki/README.md`; mounted topics belong to their owner's tables.
 4. Run `python3 scripts/ai-context.py check`, then render the topic and read it as an agent would.
 
