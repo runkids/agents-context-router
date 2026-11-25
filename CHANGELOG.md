@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0](https://github.com/runkids/agents-context-router/compare/v0.5.0...v0.6.0) (2026-11-25)
+
+
+### Features
+
+* fall back to the page frontmatter description in list ([#25](https://github.com/runkids/agents-context-router/issues/25)) ([42cd1b1](https://github.com/runkids/agents-context-router/commit/42cd1b17b058c0a3ff73a5358e8bb8b1fa18fc02))
+* opt in to exempting OKF reserved pages from orphan checks ([#24](https://github.com/runkids/agents-context-router/issues/24)) ([94eaf48](https://github.com/runkids/agents-context-router/commit/94eaf48d15df99b3b4663e6e5811093a3b88016d))
+
 ## [0.5.0](https://github.com/runkids/agents-context-router/compare/v0.4.0...v0.5.0) (2026-11-20)
 
 
