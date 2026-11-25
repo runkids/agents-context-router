@@ -1,3 +1,10 @@
+---
+type: Guide
+title: Versioning and releases
+description: How the repository, plugins, skill and router share one version, which commit types trigger a release, and how to publish one.
+generated: { by: claude-code/claude-opus-5-5, at: "2026-11-24T16:01:36Z" }
+---
+
 # Versioning and releases
 
 The repository, native plugins, Pi package, skill and bundled router share one
