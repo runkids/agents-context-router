@@ -140,7 +140,17 @@ Skill 會先測量目前的 context，再整理文件、設定路由並檢查結
 python3 scripts/ai-context.py list
 python3 scripts/ai-context.py debugging
 python3 scripts/ai-context.py check
+python3 scripts/ai-context.py list --json
+python3 scripts/ai-context.py check --json
 ```
+
+`list --json` 和 `check --json` 輸出一個 JSON 物件，包含 `schemaVersion`（目前為 1）、`version`、`ok`、`topics` 和 `problems`；只要外層根目錄或任一掛載根有問題，`ok` 就是 false；`check` 將每個掛載根的問題放在其 `mounts` 項目中，而不是頂層 `problems`。使用方應拒絕不認得的 schema version：新增欄位時仍為 1，不相容的變更會提升版本號。設定無法載入或驗證時不輸出 JSON，訊息寫到 stderr，結束狀態為 1。
+
+- `check` 另外包含 `rootInstructions`（`path`、`bytes`、`cap`）和 `mounts`。每個 topic 有 `name`、`description`、`bytes`、`cap` 和 `sources`（`path`，指定章節時還有 `heading`）。
+- `mounts` 的每一項包含該掛載根的 `mount`、`root`、`rootInstructions`、`topics` 和 `problems`。`root` 相對於外層根目錄，其中的 `file` 相對於掛載根目錄。
+- `list` 的 topic 有 `name` 和 `description`，掛載的 topic 還有 `mount` 和 `root`。`notices` 列出根目錄不存在的掛載的 `mount` 和 `message`。
+- 每個 problem 有 `kind`（`budget`、`source`、`root`、`unlisted`、`orphan`、`link` 或 `mount`）和 `message`，適用時還有 `topic`、`file` 或 `mount`；只有 `link` problem 有 `line`。
+- 檔案或 topic 無法讀取時，`bytes` 為 `null`。無法載入的掛載 `rootInstructions` 為 `null`，根目錄無法解析時 `root` 也為 `null`。
 
 `list` 顯示可用的 topic。指定 topic 名稱後，腳本只會輸出對應內容，並標示來源路徑。`check` 會驗證路由和設定的上限。
 

@@ -1,7 +1,23 @@
 #!/usr/bin/env python3
 """Print only the doc sections a task needs.
 
-usage: ai-context.py list | [--dedupe] <topic> [<topic>...] | check | --version
+usage: ai-context.py list [--json] | [--dedupe] <topic> [<topic>...] | check [--json] | --version
+
+JSON output (schemaVersion 1) has schemaVersion, version, ok, topics, problems.
+check adds rootInstructions {path, bytes, cap} and mounts [{mount, root,
+rootInstructions, topics, problems}]; its topics have name, description, bytes,
+cap and sources [{path, heading?}]. list topics have name and description, plus
+mount and root for mounted topics; list adds notices [{mount, message}].
+bytes is null when unreadable; a mount that cannot load has null rootInstructions
+(and null root when its root cannot be resolved).
+Problems have kind and message, plus topic, file, line (link problems only) or
+mount where they apply. Kinds: budget, source, root, unlisted, orphan, link, mount.
+ok is false when the outer root or any mount has a problem; check keeps each
+mount's problems in its mounts entry, not in top-level problems. Inside a
+mount, file is relative to that mount's root, and the mount's root is relative
+to the outer root.
+New fields keep schemaVersion 1; a breaking change bumps it, so refuse unknown
+values. A config that cannot load or validate prints no JSON (stderr, status 1).
 
 Topics live in wiki/ai-context.json. A source is a whole file or one exact
 heading (the section runs to the next heading of the same or higher level).
@@ -628,6 +644,14 @@ def history_indexed(path, rel, wiki, router_text, cfg, root=None):
     return any(reference in router_text for reference in references)
 
 
+class Problem(str):
+    def __new__(cls, message, file, line=None):
+        result = super().__new__(cls, message)
+        result.file = file
+        result.line = line
+        return result
+
+
 def orphans(cfg, reference_text='', root=None, excluded_roots=(), scope=None):
     """Docs that exist on disk but that no agent can reach through the router."""
     owner = ROOT if root is None else root
@@ -668,7 +692,7 @@ def orphans(cfg, reference_text='', root=None, excluded_roots=(), scope=None):
     prefixes = indexed_prefixes(indexed)
     def walk_error(error):
         rel = os.path.relpath(error.filename or owner, owner).replace(os.sep, '/')
-        bad.append(f'{rel}: cannot scan directory: {error}')
+        bad.append(Problem(f'{rel}: cannot scan directory: {error}', rel))
     for d, dirs, files in os.walk(owner, onerror=walk_error if root is not None else None):
         base = os.path.relpath(d, owner).replace(os.sep, '/')
         dirs[:] = [x for x in dirs if x != '.git' and
@@ -694,7 +718,7 @@ def orphans(cfg, reference_text='', root=None, excluded_roots=(), scope=None):
             if (any(fnmatch.fnmatch(rel, pattern) for pattern in indexed)
                     and identity not in routed and rel not in reference_text
                     and not any(isinstance(reason, str) and reason.strip() for reason in reasons)):
-                bad.append(f'{rel}: indexed page not named (name it in a topic page, route it, or list it under "unrouted" with a reason)')
+                bad.append(Problem(f'{rel}: indexed page not named (name it in a topic page, route it, or list it under "unrouted" with a reason)', rel))
             if (reasons or (not (root is not None and wiki_path(scanned, wiki, root=root))
                             and any(x in skip or x.startswith('.') for x in rel.split('/')[:-1]))):
                 continue
@@ -705,13 +729,13 @@ def orphans(cfg, reference_text='', root=None, excluded_roots=(), scope=None):
                 continue
             if scanned.startswith(history + '/') or (root is not None and history == '.'):
                 if not history_indexed(path, rel, wiki, router_text, cfg, root=root):
-                    bad.append(f'{rel}: history file not indexed in {router}')
+                    bad.append(Problem(f'{rel}: history file not indexed in {router}', rel))
             elif scanned.startswith(wiki + '/') or (root is not None and wiki == '.'):
                 if (scanned != router and identity not in routed
                         and (root is None or scanned != root_file)):
-                    bad.append(f'{rel}: wiki page no topic loads (map it, or list it under "unrouted" with a reason)')
+                    bad.append(Problem(f'{rel}: wiki page no topic loads (map it, or list it under "unrouted" with a reason)', rel))
             elif f == 'AGENTS.md' and scanned != root_file and identity not in routed:
-                bad.append(f'{rel}: scoped instructions no topic loads')
+                bad.append(Problem(f'{rel}: scoped instructions no topic loads', rel))
     return bad
 
 
@@ -1247,7 +1271,7 @@ def link_problems(cfg, root=None, excluded_roots=(), scope=None):
         prefixes, skip_dirs = indexed_prefixes(indexed), skip_patterns(cfg) or []
         def walk_error(error):
             rel = os.path.relpath(error.filename or owner, owner).replace(os.sep, '/')
-            bad.append(f'{rel}: cannot scan indexed directory: {error}')
+            bad.append(Problem(f'{rel}: cannot scan indexed directory: {error}', rel))
         for directory, dirs, files in os.walk(owner, onerror=walk_error if root is not None else None):
             base = os.path.relpath(directory, owner).replace(os.sep, '/')
             if root is not None:
@@ -1256,7 +1280,7 @@ def link_problems(cfg, root=None, excluded_roots=(), scope=None):
                     if (name.endswith('.md') and any(fnmatch.fnmatch(rel, pattern) for pattern in indexed)
                             and not excluded_path(os.path.join(directory, name), excluded_roots)
                             and not skipped_dir(rel, skip_dirs, wiki, root=root)):
-                        bad.append(f'{rel}: indexed page is not a file inside repo')
+                        bad.append(Problem(f'{rel}: indexed page is not a file inside repo', rel))
             dirs[:] = [name for name in dirs if name != '.git' and
                        not excluded_path(os.path.join(directory, name), excluded_roots) and
                        (root is None or inside_root(os.path.join(directory, name), scope, allow_root=True)) and
@@ -1283,7 +1307,7 @@ def link_problems(cfg, root=None, excluded_roots=(), scope=None):
             continue
         canonical = os.path.realpath(directory)
         if not inside_root(directory, scope, allow_root=True):
-            bad.append(f'{os.path.relpath(directory, owner).replace(os.sep, "/")}: wiki directory is outside repo')
+            bad.append(Problem(f'{os.path.relpath(directory, owner).replace(os.sep, "/")}: wiki directory is outside repo', os.path.relpath(directory, owner).replace(os.sep, '/')))
             continue
         if canonical in ancestors:
             continue
@@ -1297,21 +1321,21 @@ def link_problems(cfg, root=None, excluded_roots=(), scope=None):
                     elif entry.name.endswith('.md'):
                         wiki_paths.add(os.path.abspath(entry.path))
         except OSError as error:
-            bad.append(f'{os.path.relpath(directory, owner).replace(os.sep, "/")}: cannot scan wiki directory: {error}')
+            bad.append(Problem(f'{os.path.relpath(directory, owner).replace(os.sep, "/")}: cannot scan wiki directory: {error}', os.path.relpath(directory, owner).replace(os.sep, '/')))
     for path in sorted(paths | wiki_paths):
         rel = os.path.relpath(path, owner).replace(os.sep, '/')
         if not inside_root(path, scope) or not os.path.isfile(path):
             if path == router:
-                bad.append(f'{rel}: router is not a file inside repo')
+                bad.append(Problem(f'{rel}: router is not a file inside repo', rel))
             elif path in wiki_paths and path not in sources:
-                bad.append(f'{rel}: wiki page is not a file inside repo')
+                bad.append(Problem(f'{rel}: wiki page is not a file inside repo', rel))
             elif root is not None and path in indexed_paths:
-                bad.append(f'{rel}: indexed page is not a file inside repo')
+                bad.append(Problem(f'{rel}: indexed page is not a file inside repo', rel))
             continue  # Rendering retains ownership of invalid configured sources.
         try:
             lines = read_text(path, owner, scope=scope).split('\n')
         except (ValueError, OSError) as error:
-            bad.append(f'{rel}: {error}')
+            bad.append(Problem(f'{rel}: {error}', rel))
             continue
         for line, raw in link_destinations(lines):
             dest = markdown_unescape(raw)
@@ -1325,18 +1349,25 @@ def link_problems(cfg, root=None, excluded_roots=(), scope=None):
             except (OSError, ValueError):
                 target = ''
             if not inside_root(target, scope) or not os.path.isfile(target):
-                bad.append(f'{rel}:{line}: relative link {raw!r} is not a file inside repo')
+                bad.append(Problem(f'{rel}:{line}: relative link {raw!r} is not a file inside repo', rel, line))
     return bad
 
 
-def check(cfg, root=None, excluded_roots=(), namespace='', summary=True):
+def collect_check(cfg, root=None, excluded_roots=(), namespace='', detail=False):
     owner = ROOT if root is None else root
     scope = PhysicalPath(owner)
     excluded_roots = tuple(path if isinstance(path, PhysicalPath) else PhysicalPath(path)
                            for path in excluded_roots)
-    bad = link_problems(cfg, root=root, excluded_roots=excluded_roots, scope=scope)
+    def records(kind, messages):
+        return [dict({'kind': kind, 'message': str(message)},
+                     **({'file': message.file} if isinstance(message, Problem) else {}),
+                     **({'line': message.line} if isinstance(message, Problem) and message.line is not None else {}))
+                for message in messages]
+    bad = records('link', link_problems(cfg, root=root, excluded_roots=excluded_roots, scope=scope))
     budgets = cfg.get('budgets', {})
     root_file = cfg.get('rootInstructions', 'AGENTS.md')
+    root_cap = budgets.get('rootInstructionsMaxBytes', 8192)
+    root_result = {'path': root_file, 'bytes': None, 'cap': root_cap}
     root_text = ''
     try:
         path = (os.path.join(owner, root_file) if root is None else
@@ -1347,40 +1378,101 @@ def check(cfg, root=None, excluded_roots=(), namespace='', summary=True):
         # UTF-8 bytes belong to its budget, not the caller's displayed markers.
         root_text = read_text(path, root, f'rootInstructions {path}: outside root {owner}', scope=scope)
         root_size = len(root_text.encode('utf-8'))
-        root_cap = budgets.get('rootInstructionsMaxBytes', 8192)
-        print(f'{namespace + root_file:18} {root_size:6} B  (cap {root_cap})')
+        root_result['bytes'] = root_size
         if root_size > root_cap:
-            bad.append(f'{root_file} {root_size} B > {root_cap}')
+            bad.append({'kind': 'budget', 'file': root_file, 'message': f'{root_file} {root_size} B > {root_cap}'})
     except (ValueError, OSError) as error:
-        bad.append(f'{root_file}: {error}')
-    reference_text = [root_text]
+        bad.append({'kind': 'root', 'file': root_file, 'message': f'{root_file}: {error}'})
+    reference_text, topics = [root_text], []
     for name, t in cfg['topics'].items():
+        qualified = namespace + name
+        cap = t.get('maxBytes', budgets.get('defaultTopicMaxBytes', 16384))
+        item = {'name': qualified, 'bytes': None, 'cap': cap}
+        if detail:
+            item['description'] = topic_description(t, owner)
+            item['sources'] = [{key: source[key] for key in ('path', 'heading') if key in source}
+                               for source in t['sources']]
+        topics.append(item)
         if f'`{name}`' not in root_text:
-            bad.append(f'{name}: not listed in {root_file} (agents will not know it exists)')
+            bad.append({'kind': 'unlisted', 'topic': qualified, 'message': f'{name}: not listed in {root_file} (agents will not know it exists)'})
         try:
             rendered = render(cfg, name, root=root, scope=scope)
             size = len(rendered.encode())
         except (ValueError, OSError) as e:
-            bad.append(f'{name}: {e}')
+            bad.append({'kind': 'source', 'topic': qualified, 'message': f'{name}: {e}'})
             continue
         reference_text.append(rendered)
-        cap = t.get('maxBytes', budgets.get('defaultTopicMaxBytes', 16384))
-        print(f'{namespace + name:18} {size:6} B  (cap {cap})')
+        item['bytes'] = size
         if size > cap:
-            bad.append(f'{name}: {size} B > {cap} (split the topic; do not raise the cap)')
-    bad = orphans(cfg, '\n'.join(reference_text), root=root, excluded_roots=excluded_roots,
-                  scope=scope) + bad
-    for b in bad:
-        print(f'FAIL mount {diagnostic(namespace[:-1])}: {diagnostic(b)}' if namespace else f'FAIL {b}')
+            bad.append({'kind': 'budget', 'topic': qualified, 'message': f'{name}: {size} B > {cap} (split the topic; do not raise the cap)'})
+    bad = records('orphan', orphans(cfg, '\n'.join(reference_text), root=root,
+                                  excluded_roots=excluded_roots, scope=scope)) + bad
+    return {'mount': namespace[:-1] if namespace else None, 'rootInstructions': root_result,
+            'topics': topics, 'problems': bad}
+
+
+def show_check(result, summary=True):
+    namespace = result['mount'] + '/' if result['mount'] is not None else ''
+    root = result['rootInstructions']
+    if root is not None and root['bytes'] is not None:
+        print(f"{namespace + root['path']:18} {root['bytes']:6} B  (cap {root['cap']})")
+    for topic in result['topics']:
+        if topic['bytes'] is not None:
+            print(f"{topic['name']:18} {topic['bytes']:6} B  (cap {topic['cap']})")
+    for problem in result['problems']:
+        message = problem['message']
+        print(f'FAIL mount {diagnostic(result["mount"])}: {diagnostic(message)}' if result['mount'] is not None else f'FAIL {message}')
     if summary:
-        print('ok' if not bad else f'{len(bad)} problem(s)')
-    return 1 if bad else 0
+        print('ok' if not result['problems'] else f"{len(result['problems'])} problem(s)")
+    return int(bool(result['problems']))
+
+
+def check(cfg, root=None, excluded_roots=(), namespace='', summary=True):
+    return show_check(collect_check(cfg, root, excluded_roots, namespace), summary)
+
+
+def check_results(cfg, entries, detail):
+    excluded = [entry.root for entry in entries if entry.root is not None]
+    yield collect_check(cfg, excluded_roots=excluded, detail=detail)
+    for entry in entries:
+        origin = os.path.relpath(entry.root, ROOT).replace(os.sep, '/') if entry.root is not None else None
+        try:
+            mounted = load_mount(entry)
+        except (OSError, ValueError) as error:
+            yield {'mount': entry.name, 'root': origin, 'rootInstructions': None, 'topics': [],
+                   'problems': [{'kind': 'mount', 'message': str(error)}]}
+            continue
+        yield dict({'mount': entry.name, 'root': origin},
+                   **collect_check(mounted, root=entry.root, namespace=entry.name + '/', detail=detail))
+
+
+def list_items(cfg, entries, namespaces):
+    for name, topic in cfg['topics'].items():
+        if name.split('/', 1)[0] not in namespaces or '/' not in name:
+            yield 'topics', {'name': name, 'description': topic_description(topic, ROOT)}
+    for entry in entries:
+        try:
+            mounted = load_mount(entry)
+        except MissingMount as error:
+            yield 'notices', {'mount': entry.name, 'message': str(error)}
+            continue
+        except (OSError, ValueError) as error:
+            yield 'problems', {'kind': 'mount', 'mount': entry.name, 'message': str(error)}
+            continue
+        origin = os.path.relpath(entry.root, ROOT).replace(os.sep, '/')
+        for name, topic in mounted['topics'].items():
+            yield 'topics', {'name': entry.name + '/' + name,
+                             'description': topic_description(topic, entry.root),
+                             'mount': entry.name, 'root': origin}
 
 
 def main(argv):
     sys.stdout.reconfigure(encoding='utf-8')  # section markers and CJK pages break cp1252/cp950 consoles on Windows
     sys.stderr.reconfigure(encoding='utf-8')  # error messages can carry non-ASCII paths
     args = argv[1:] or ['list']
+    as_json = args in (['list', '--json'], ['check', '--json'])
+    if as_json:
+        args = args[:1]
     if args == ['--version']:
         print(f'agents-context-router {VERSION}')
         return 0
@@ -1391,42 +1483,41 @@ def main(argv):
         validate_defaults(cfg)
         entries = mount_entries(cfg)
     except ValueError as error:
-        print(f'FAIL {diagnostic(error)}', file=sys.stdout if args == ['check'] else sys.stderr)
+        print(f'FAIL {diagnostic(error)}', file=sys.stdout if args == ['check'] and not as_json else sys.stderr)
         return 1
     namespaces = {entry.name: entry for entry in entries if valid_mount_name(entry.name)}
     if args == ['list']:
-        for n, t in cfg['topics'].items():
-            if n.split('/', 1)[0] not in namespaces or '/' not in n:
-                print(f'{n:18} {topic_description(t, ROOT)}')
-        failed = False
-        for entry in entries:
-            try:
-                mounted = load_mount(entry)
-            except MissingMount as error:
-                print(f'NOTICE mount {diagnostic(entry.name)}: {diagnostic(error)}')
-                continue
-            except (OSError, ValueError) as error:
-                print(f'FAIL mount {diagnostic(entry.name)}: {diagnostic(error)}', file=sys.stderr)
-                failed = True
-                continue
-            origin = os.path.relpath(entry.root, ROOT).replace(os.sep, '/')
-            for name, topic in mounted['topics'].items():
-                print(f'{entry.name + "/" + name:18} {topic_description(topic, entry.root)} [{origin}]')
+        sections = {'topics': [], 'notices': [], 'problems': []}
+        for section, item in list_items(cfg, entries, namespaces):
+            sections[section].append(item)
+            if not as_json:
+                if section == 'topics':
+                    suffix = f" [{item['root']}]" if 'root' in item else ''
+                    print(f"{item['name']:18} {item['description']}{suffix}")
+                else:
+                    label = 'NOTICE' if section == 'notices' else 'FAIL'
+                    print(f"{label} mount {diagnostic(item['mount'])}: {diagnostic(item['message'])}",
+                          file=sys.stdout if section == 'notices' else sys.stderr)
+        failed = bool(sections['problems'])
+        if as_json:
+            print(json.dumps(dict(schemaVersion=1, version=VERSION, ok=not failed, **sections), indent=2))
         return int(failed)
     if args == ['check']:
-        if not entries:
-            return check(cfg)
-        excluded = [entry.root for entry in entries if entry.root is not None]
-        failed = check(cfg, excluded_roots=excluded, summary=False)
-        for entry in entries:
-            try:
-                mounted = load_mount(entry)
-            except (OSError, ValueError) as error:
-                print(f'FAIL mount {diagnostic(entry.name)}: {diagnostic(error)}')
-                failed += 1
-                continue
-            failed += check(mounted, root=entry.root, namespace=entry.name + '/', summary=False)
-        print(f'{failed} root(s) failed' if failed else 'ok')
+        results = []
+        failed = 0
+        for result in check_results(cfg, entries, as_json):
+            if as_json:
+                results.append(result)
+                failed += bool(result['problems'])
+            else:
+                failed += show_check(result, summary=not entries)
+        if as_json:
+            main_result = results[0].copy()
+            main_result.pop('mount')
+            print(json.dumps(dict(schemaVersion=1, version=VERSION, ok=not failed,
+                                  **main_result, mounts=results[1:]), indent=2))
+        elif entries:
+            print(f'{failed} root(s) failed' if failed else 'ok')
         return int(bool(failed))
     # A local topic literally named --dedupe keeps priority over the option.
     dedupe = args[0] == '--dedupe' and '--dedupe' not in cfg['topics']
