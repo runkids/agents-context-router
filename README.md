@@ -144,7 +144,7 @@ python3 scripts/ai-context.py list --json
 python3 scripts/ai-context.py check --json
 ```
 
-`list --json` and `check --json` print one JSON object with `schemaVersion` (currently 1), `version`, `ok`, `topics` and `problems`; `ok` is false when there is any problem. Refuse schema versions you do not know: new fields keep version 1, and a breaking change bumps it. A config that cannot load or validate prints no JSON; the message goes to stderr and the exit status is 1.
+`list --json` and `check --json` print one JSON object with `schemaVersion` (currently 1), `version`, `ok`, `topics` and `problems`; `ok` is false when the outer root or any mount has a problem, and `check` keeps each mount's problems in its own `mounts` entry, not in top-level `problems`. Refuse schema versions you do not know: new fields keep version 1, and a breaking change bumps it. A config that cannot load or validate prints no JSON; the message goes to stderr and the exit status is 1.
 
 - `check` adds `rootInstructions` (`path`, `bytes`, `cap`) and `mounts`. Each topic has `name`, `description`, `bytes`, `cap` and `sources` (`path`, plus `heading` for a section source).
 - Each `mounts` entry has `mount`, `root`, `rootInstructions`, `topics` and `problems` for that mounted root. Its `root` is relative to the outer root; a `file` inside it is relative to the mount's root.

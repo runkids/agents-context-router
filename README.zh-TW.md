@@ -144,7 +144,7 @@ python3 scripts/ai-context.py list --json
 python3 scripts/ai-context.py check --json
 ```
 
-`list --json` 和 `check --json` 輸出一個 JSON 物件，包含 `schemaVersion`（目前為 1）、`version`、`ok`、`topics` 和 `problems`；只要有問題，`ok` 就是 false。使用方應拒絕不認得的 schema version：新增欄位時仍為 1，不相容的變更會提升版本號。設定無法載入或驗證時不輸出 JSON，訊息寫到 stderr，結束狀態為 1。
+`list --json` 和 `check --json` 輸出一個 JSON 物件，包含 `schemaVersion`（目前為 1）、`version`、`ok`、`topics` 和 `problems`；只要外層根目錄或任一掛載根有問題，`ok` 就是 false；`check` 將每個掛載根的問題放在其 `mounts` 項目中，而不是頂層 `problems`。使用方應拒絕不認得的 schema version：新增欄位時仍為 1，不相容的變更會提升版本號。設定無法載入或驗證時不輸出 JSON，訊息寫到 stderr，結束狀態為 1。
 
 - `check` 另外包含 `rootInstructions`（`path`、`bytes`、`cap`）和 `mounts`。每個 topic 有 `name`、`description`、`bytes`、`cap` 和 `sources`（`path`，指定章節時還有 `heading`）。
 - `mounts` 的每一項包含該掛載根的 `mount`、`root`、`rootInstructions`、`topics` 和 `problems`。`root` 相對於外層根目錄，其中的 `file` 相對於掛載根目錄。

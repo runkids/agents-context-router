@@ -144,7 +144,7 @@ python3 scripts/ai-context.py list --json
 python3 scripts/ai-context.py check --json
 ```
 
-`list --json` と `check --json` は 1 つの JSON オブジェクトを出力し、`schemaVersion`（現在は 1）、`version`、`ok`、`topics`、`problems` を含みます。問題が 1 つでもあれば `ok` は false です。知らない schema version は拒否してください。フィールドの追加では version 1 のまま、互換性のない変更では番号が上がります。設定を読み込みまたは検証できない場合、JSON は出力されず、メッセージが stderr に出て終了ステータスは 1 です。
+`list --json` と `check --json` は 1 つの JSON オブジェクトを出力し、`schemaVersion`（現在は 1）、`version`、`ok`、`topics`、`problems` を含みます。外側のルートかいずれかのマウントに問題が 1 つでもあれば `ok` は false です。`check` では、各マウントの問題はトップレベルの `problems` ではなく、その `mounts` の要素に入ります。知らない schema version は拒否してください。フィールドの追加では version 1 のまま、互換性のない変更では番号が上がります。設定を読み込みまたは検証できない場合、JSON は出力されず、メッセージが stderr に出て終了ステータスは 1 です。
 
 - `check` は `rootInstructions`（`path`、`bytes`、`cap`）と `mounts` を追加します。各 topic は `name`、`description`、`bytes`、`cap`、`sources`（`path`、セクション指定なら `heading` も）を持ちます。
 - `mounts` の各要素は、そのマウント先の `mount`、`root`、`rootInstructions`、`topics`、`problems` を持ちます。`root` は外側のルートからの相対パスで、その中の `file` はマウント先ルートからの相対パスです。

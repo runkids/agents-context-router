@@ -12,8 +12,10 @@ bytes is null when unreadable; a mount that cannot load has null rootInstruction
 (and null root when its root cannot be resolved).
 Problems have kind and message, plus topic, file, line (link problems only) or
 mount where they apply. Kinds: budget, source, root, unlisted, orphan, link, mount.
-ok is false when any problem exists. Inside a mount, file is relative to that
-mount's root, and the mount's root is relative to the outer root.
+ok is false when the outer root or any mount has a problem; check keeps each
+mount's problems in its mounts entry, not in top-level problems. Inside a
+mount, file is relative to that mount's root, and the mount's root is relative
+to the outer root.
 New fields keep schemaVersion 1; a breaking change bumps it, so refuse unknown
 values. A config that cannot load or validate prints no JSON (stderr, status 1).
 
