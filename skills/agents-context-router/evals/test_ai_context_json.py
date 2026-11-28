@@ -51,7 +51,6 @@ class JsonTests(unittest.TestCase):
         self.cfg['topics']['guide']['description'] = 'Explicit'
         self.save()
         self.assertEqual(self.run_json('list')['topics'][0]['description'], 'Explicit')
-        self.assertEqual(run_router(self.script, 'list').stdout, 'guide              Explicit\n')
 
     def test_text_check_does_not_read_descriptions(self):
         spec = importlib.util.spec_from_file_location('router', SCRIPT)

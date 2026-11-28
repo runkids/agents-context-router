@@ -1374,6 +1374,8 @@ def collect_check(cfg, root=None, excluded_roots=(), namespace='', detail=False)
                 configured_path(root_file, owner, 'rootInstructions'))
         if root is not None and not stat.S_ISREG(os.stat(path).st_mode):
             raise ValueError('expected a regular file')
+        # Read the kernel without section stripping; its own whitespace and
+        # UTF-8 bytes belong to its budget, not the caller's displayed markers.
         root_text = read_text(path, root, f'rootInstructions {path}: outside root {owner}', scope=scope)
         root_size = len(root_text.encode('utf-8'))
         root_result['bytes'] = root_size
@@ -1396,8 +1398,8 @@ def collect_check(cfg, root=None, excluded_roots=(), namespace='', detail=False)
         try:
             rendered = render(cfg, name, root=root, scope=scope)
             size = len(rendered.encode())
-        except (ValueError, OSError) as error:
-            bad.append({'kind': 'source', 'topic': qualified, 'message': f'{name}: {error}'})
+        except (ValueError, OSError) as e:
+            bad.append({'kind': 'source', 'topic': qualified, 'message': f'{name}: {e}'})
             continue
         reference_text.append(rendered)
         item['bytes'] = size
@@ -1440,9 +1442,8 @@ def check_results(cfg, entries, detail):
             yield {'mount': entry.name, 'root': origin, 'rootInstructions': None, 'topics': [],
                    'problems': [{'kind': 'mount', 'message': str(error)}]}
             continue
-        result = collect_check(mounted, root=entry.root, namespace=entry.name + '/', detail=detail)
-        result['root'] = origin
-        yield result
+        yield dict({'mount': entry.name, 'root': origin},
+                   **collect_check(mounted, root=entry.root, namespace=entry.name + '/', detail=detail))
 
 
 def list_items(cfg, entries, namespaces):
@@ -1513,10 +1514,8 @@ def main(argv):
         if as_json:
             main_result = results[0].copy()
             main_result.pop('mount')
-            mounts = [dict(mount=r['mount'], root=r['root'], rootInstructions=r['rootInstructions'],
-                           topics=r['topics'], problems=r['problems']) for r in results[1:]]
             print(json.dumps(dict(schemaVersion=1, version=VERSION, ok=not failed,
-                                  **main_result, mounts=mounts), indent=2))
+                                  **main_result, mounts=results[1:]), indent=2))
         elif entries:
             print(f'{failed} root(s) failed' if failed else 'ok')
         return int(bool(failed))
