@@ -636,9 +636,10 @@ def history_indexed(path, rel, wiki, router_text, cfg, root=None):
 
 
 class Problem(str):
-    def __new__(cls, message, file):
+    def __new__(cls, message, file, line=None):
         result = super().__new__(cls, message)
         result.file = file
+        result.line = line
         return result
 
 
@@ -1339,7 +1340,7 @@ def link_problems(cfg, root=None, excluded_roots=(), scope=None):
             except (OSError, ValueError):
                 target = ''
             if not inside_root(target, scope) or not os.path.isfile(target):
-                bad.append(Problem(f'{rel}:{line}: relative link {raw!r} is not a file inside repo', rel))
+                bad.append(Problem(f'{rel}:{line}: relative link {raw!r} is not a file inside repo', rel, line))
     return bad
 
 
@@ -1350,7 +1351,8 @@ def collect_check(cfg, root=None, excluded_roots=(), namespace='', detail=False)
                            for path in excluded_roots)
     def records(kind, messages):
         return [dict({'kind': kind, 'message': str(message)},
-                     **({'file': message.file} if isinstance(message, Problem) else {}))
+                     **({'file': message.file} if isinstance(message, Problem) else {}),
+                     **({'line': message.line} if isinstance(message, Problem) and message.line is not None else {}))
                 for message in messages]
     bad = records('link', link_problems(cfg, root=root, excluded_roots=excluded_roots, scope=scope))
     budgets = cfg.get('budgets', {})
@@ -1367,9 +1369,9 @@ def collect_check(cfg, root=None, excluded_roots=(), namespace='', detail=False)
         root_size = len(root_text.encode('utf-8'))
         root_result['bytes'] = root_size
         if root_size > root_cap:
-            bad.append({'kind': 'budget', 'message': f'{root_file} {root_size} B > {root_cap}'})
+            bad.append({'kind': 'budget', 'file': root_file, 'message': f'{root_file} {root_size} B > {root_cap}'})
     except (ValueError, OSError) as error:
-        bad.append({'kind': 'root', 'message': f'{root_file}: {error}'})
+        bad.append({'kind': 'root', 'file': root_file, 'message': f'{root_file}: {error}'})
     reference_text, topics = [root_text], []
     for name, t in cfg['topics'].items():
         qualified = namespace + name
@@ -1422,13 +1424,16 @@ def check_results(cfg, entries, detail):
     excluded = [entry.root for entry in entries if entry.root is not None]
     yield collect_check(cfg, excluded_roots=excluded, detail=detail)
     for entry in entries:
+        origin = os.path.relpath(entry.root, ROOT).replace(os.sep, '/') if entry.root is not None else None
         try:
             mounted = load_mount(entry)
         except (OSError, ValueError) as error:
-            yield {'mount': entry.name, 'rootInstructions': None, 'topics': [],
+            yield {'mount': entry.name, 'root': origin, 'rootInstructions': None, 'topics': [],
                    'problems': [{'kind': 'mount', 'message': str(error)}]}
             continue
-        yield collect_check(mounted, root=entry.root, namespace=entry.name + '/', detail=detail)
+        result = collect_check(mounted, root=entry.root, namespace=entry.name + '/', detail=detail)
+        result['root'] = origin
+        yield result
 
 
 def list_items(cfg, entries, namespaces):
@@ -1499,7 +1504,7 @@ def main(argv):
         if as_json:
             main_result = results[0].copy()
             main_result.pop('mount')
-            mounts = [dict(namespace=r['mount'], rootInstructions=r['rootInstructions'],
+            mounts = [dict(mount=r['mount'], root=r['root'], rootInstructions=r['rootInstructions'],
                            topics=r['topics'], problems=r['problems']) for r in results[1:]]
             print(json.dumps(dict(schemaVersion=1, version=VERSION, ok=not failed,
                                   **main_result, mounts=mounts), indent=2))

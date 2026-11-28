@@ -104,12 +104,30 @@ class JsonTests(unittest.TestCase):
         self.assertEqual([p['kind'] for p in problems], sorted([p['kind'] for p in problems], key={'orphan': 0, 'link': 1, 'budget': 2, 'unlisted': 3, 'source': 4}.get))
         self.assertTrue(any(p.get('topic') == 'guide' and p['kind'] == 'source' for p in problems))
         self.assertTrue(any(p.get('file') == 'wiki/history/old.md' and p['kind'] == 'orphan' for p in problems))
-        self.assertTrue(any(p.get('file') == 'wiki/orphan.md' and p['kind'] == 'link' for p in problems))
+        self.assertTrue(any(p.get('file') == 'wiki/orphan.md' and p.get('line') == 1
+                            and p['kind'] == 'link' for p in problems))
+        self.assertTrue(any(p['kind'] == 'budget' and p.get('file') == 'AGENTS.md'
+                            for p in problems))
+        check = run_router(self.script, 'check')
+        self.assertEqual((check.stdout, check.stderr, check.returncode), (
+            'AGENTS.md              10 B  (cap 1)\n'
+            'FAIL wiki/orphan.md: wiki page no topic loads (map it, or list it under "unrouted" with a reason)\n'
+            'FAIL wiki/history/old.md: history file not indexed in wiki/README.md\n'
+            "FAIL wiki/orphan.md:1: relative link 'missing.md' is not a file inside repo\n"
+            'FAIL AGENTS.md 10 B > 1\n'
+            'FAIL guide: not listed in AGENTS.md (agents will not know it exists)\n'
+            "FAIL guide: wiki/guide.md: heading 'Missing' found 0x\n"
+            '6 problem(s)\n', '', 1))
+        listing = run_router(self.script, 'list')
+        self.assertEqual((listing.stdout, listing.stderr, listing.returncode),
+                         ('guide              A guide\n', '', 0))
+
     def test_missing_root(self):
         (self.root / 'AGENTS.md').unlink()
         data = self.run_json('check')
         self.assertIsNone(data['rootInstructions']['bytes'])
-        self.assertTrue(any(p['kind'] == 'root' for p in data['problems']))
+        self.assertTrue(any(p['kind'] == 'root' and p.get('file') == 'AGENTS.md'
+                            for p in data['problems']))
 
     def test_flag_wins_over_topic(self):
         self.cfg['topics']['--json'] = self.cfg['topics']['guide']
@@ -130,13 +148,17 @@ class JsonTests(unittest.TestCase):
         self.cfg['mounts'] = {'kb': {'root': 'modules/kb'}}
         self.save()
         self.assertEqual(len(self.run_json('list')['notices']), 1)
-        self.assertEqual(self.run_json('check')['mounts'][0]['problems'][0]['kind'], 'mount')
+        missing = self.run_json('check')['mounts'][0]
+        self.assertEqual((missing['mount'], missing['root']), ('kb', 'modules/kb'))
+        self.assertEqual(missing['problems'][0]['kind'], 'mount')
         self.write('modules/kb/AGENTS.md', '`guide`\n')
         self.write('modules/kb/wiki/README.md', '# Router\n')
         self.write('modules/kb/wiki/guide.md', '# Guide\n')
         self.write('modules/kb/wiki/ai-context.json', json.dumps({'topics': {'guide': {'description': 'Inner', 'sources': [{'path': 'wiki/guide.md'}]}}}))
         self.assertEqual(self.run_json('list')['topics'][1]['name'], 'kb/guide')
-        mounted_topic = self.run_json('check')['mounts'][0]['topics'][0]
+        mount = self.run_json('check')['mounts'][0]
+        self.assertEqual((mount['mount'], mount['root']), ('kb', 'modules/kb'))
+        mounted_topic = mount['topics'][0]
         self.assertEqual(mounted_topic['name'], 'kb/guide')
         self.assertEqual(mounted_topic['bytes'], 30)
         self.assertEqual(mounted_topic['cap'], 16384)
@@ -152,6 +174,16 @@ class JsonTests(unittest.TestCase):
         self.assertEqual(data['mounts'][0]['problems'][0]['kind'], 'orphan')
         text = run_router(self.script, 'check').stdout
         self.assertEqual(text, 'AGENTS.md               8 B  (cap 8192)\nguide                  59 B  (cap 16384)\nkb/AGENTS.md            8 B  (cap 8192)\nkb/guide               30 B  (cap 16384)\nFAIL mount kb: wiki/orphan.md: wiki page no topic loads (map it, or list it under "unrouted" with a reason)\n1 root(s) failed\n')
+        self.write('modules/kb/wiki/ai-context.json', json.dumps({
+            'budgets': {'rootInstructionsMaxBytes': 1},
+            'topics': {'guide': {'sources': [{'path': 'wiki/guide.md'}]}}}))
+        mount = self.run_json('check')['mounts'][0]
+        self.assertTrue(any(p['kind'] == 'budget' and p.get('file') == 'AGENTS.md'
+                            for p in mount['problems']))
+        (self.root / 'modules/kb/AGENTS.md').unlink()
+        mount = self.run_json('check')['mounts'][0]
+        self.assertTrue(any(p['kind'] == 'root' and p.get('file') == 'AGENTS.md'
+                            for p in mount['problems']))
         self.write('modules/kb/wiki/ai-context.json', '{}')
         self.assertEqual(self.run_json('list')['problems'][0]['kind'], 'mount')
 
