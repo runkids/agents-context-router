@@ -144,7 +144,13 @@ python3 scripts/ai-context.py list --json
 python3 scripts/ai-context.py check --json
 ```
 
-`list --json` and `check --json` emit `schemaVersion`, `version`, `ok`, topics and problems; check includes root instructions and mounts, while list includes notices. Problem kinds are `budget`, `source`, `root`, `unlisted`, `orphan`, `link` and `mount`. Consumers should refuse unknown schema versions. A config that cannot load or validate produces no JSON.
+`list --json` and `check --json` print one JSON object with `schemaVersion` (currently 1), `version`, `ok`, `topics` and `problems`; `ok` is false when there is any problem. Refuse schema versions you do not know: new fields keep version 1, and a breaking change bumps it. A config that cannot load or validate prints no JSON; the message goes to stderr and the exit status is 1.
+
+- `check` adds `rootInstructions` (`path`, `bytes`, `cap`) and `mounts`. Each topic has `name`, `description`, `bytes`, `cap` and `sources` (`path`, plus `heading` for a section source).
+- Each `mounts` entry has `mount`, `root`, `rootInstructions`, `topics` and `problems` for that mounted root. Its `root` is relative to the outer root; a `file` inside it is relative to the mount's root.
+- `list` topics have `name` and `description`, plus `mount` and `root` for mounted topics. `notices` holds `mount` and `message` for a mount whose root is missing.
+- Each problem has `kind` (`budget`, `source`, `root`, `unlisted`, `orphan`, `link` or `mount`) and `message`, plus `topic`, `file` or `mount` where they apply; only `link` problems have `line`.
+- `bytes` is `null` when a file or topic cannot be read. A mount that cannot load has `rootInstructions: null`, and `root: null` if its root cannot be resolved.
 
 `list` shows available topics. A topic command prints only its mapped sections, marked with their source paths. `check` validates the router and its configured limits. Relative Markdown links are always checked in complete routed sources, wiki pages (including history and routing exceptions), and pages matched by optional `indexed` patterns. Destinations resolve from the containing page and must be files inside the repository; heading fragments are not validated.
 

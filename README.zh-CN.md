@@ -144,7 +144,13 @@ python3 scripts/ai-context.py list --json
 python3 scripts/ai-context.py check --json
 ```
 
-`list --json` 和 `check --json` 输出 `schemaVersion`、`version`、`ok`、topics 和 problems。check 还包含 root instructions 和 mounts，list 包含 notices。问题 kind 包括 `budget`、`source`、`root`、`unlisted`、`orphan`、`link` 和 `mount`。使用方应拒绝未知的 schema version。配置无法加载或验证时不会输出 JSON。
+`list --json` 和 `check --json` 输出一个 JSON 对象，包含 `schemaVersion`（当前为 1）、`version`、`ok`、`topics` 和 `problems`；只要有问题，`ok` 就是 false。使用方应拒绝不认识的 schema version：新增字段时仍为 1，不兼容的变更会提升版本号。配置无法加载或验证时不输出 JSON，消息写到 stderr，退出状态为 1。
+
+- `check` 额外包含 `rootInstructions`（`path`、`bytes`、`cap`）和 `mounts`。每个 topic 有 `name`、`description`、`bytes`、`cap` 和 `sources`（`path`，指定章节时还有 `heading`）。
+- `mounts` 的每一项包含该挂载根的 `mount`、`root`、`rootInstructions`、`topics` 和 `problems`。`root` 相对于外层根目录，其中的 `file` 相对于挂载根目录。
+- `list` 的 topic 有 `name` 和 `description`，挂载的 topic 还有 `mount` 和 `root`。`notices` 列出根目录不存在的挂载的 `mount` 和 `message`。
+- 每个 problem 有 `kind`（`budget`、`source`、`root`、`unlisted`、`orphan`、`link` 或 `mount`）和 `message`，适用时还有 `topic`、`file` 或 `mount`；只有 `link` problem 有 `line`。
+- 文件或 topic 无法读取时，`bytes` 为 `null`。无法加载的挂载 `rootInstructions` 为 `null`，根目录无法解析时 `root` 也为 `null`。
 
 `list` 显示可用 topic。指定 topic 名称后，脚本只会输出映射的内容，并标注来源路径。`check` 会验证路由配置和所设上限。
 

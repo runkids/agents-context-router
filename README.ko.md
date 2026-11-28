@@ -144,7 +144,13 @@ python3 scripts/ai-context.py list --json
 python3 scripts/ai-context.py check --json
 ```
 
-`list --json`과 `check --json`은 `schemaVersion`, `version`, `ok`, topics, problems를 출력합니다. check에는 root instructions와 mounts가, list에는 notices가 포함됩니다. 문제 kind는 `budget`, `source`, `root`, `unlisted`, `orphan`, `link`, `mount`입니다. 알 수 없는 schema version은 거부하세요. 설정을 불러오거나 검증할 수 없으면 JSON을 출력하지 않습니다.
+`list --json`과 `check --json`은 JSON 객체 하나를 출력하며 `schemaVersion`(현재 1), `version`, `ok`, `topics`, `problems`를 담습니다. 문제가 하나라도 있으면 `ok`는 false입니다. 모르는 schema version은 거부하세요. 필드가 추가될 때는 version 1이 유지되고, 호환되지 않는 변경이 있으면 번호가 올라갑니다. 설정을 불러오거나 검증할 수 없으면 JSON을 출력하지 않고, 메시지는 stderr로 나가며 종료 상태는 1입니다.
+
+- `check`는 `rootInstructions`(`path`, `bytes`, `cap`)와 `mounts`를 추가합니다. 각 topic에는 `name`, `description`, `bytes`, `cap`, `sources`(`path`, 섹션 source라면 `heading`도)가 있습니다.
+- `mounts`의 각 항목에는 해당 마운트 루트의 `mount`, `root`, `rootInstructions`, `topics`, `problems`가 있습니다. `root`는 바깥 루트 기준 상대 경로이고, 그 안의 `file`은 마운트 루트 기준 상대 경로입니다.
+- `list`의 topic에는 `name`과 `description`이 있고, 마운트된 topic에는 `mount`와 `root`도 있습니다. `notices`에는 루트가 없는 마운트의 `mount`와 `message`가 담깁니다.
+- 각 problem에는 `kind`(`budget`, `source`, `root`, `unlisted`, `orphan`, `link`, `mount`)와 `message`가 있고, 해당할 때 `topic`, `file`, `mount`가 붙습니다. `line`은 `link` problem에만 있습니다.
+- 파일이나 topic을 읽을 수 없으면 `bytes`는 `null`입니다. 불러올 수 없는 마운트는 `rootInstructions: null`이고, 루트를 해석할 수 없으면 `root: null`도 됩니다.
 
 `list`는 사용 가능한 topic을 보여 줍니다. topic 이름을 지정하면 해당 부분만 원본 경로와 함께 출력합니다. `check`는 router와 설정된 한도를 검증합니다.
 

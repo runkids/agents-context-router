@@ -3,12 +3,19 @@
 
 usage: ai-context.py list [--json] | [--dedupe] <topic> [<topic>...] | check [--json] | --version
 
-JSON output has schemaVersion, version, ok, topics and problems.
-Check also has rootInstructions and mounts; list has notices.
-Problems have kind and message, and may have topic, file or mount.
-Kinds are budget, source, root, unlisted, orphan, link and mount.
-Consumers should refuse unknown schemaVersion values.
-A config that cannot load or validate produces no JSON.
+JSON output (schemaVersion 1) has schemaVersion, version, ok, topics, problems.
+check adds rootInstructions {path, bytes, cap} and mounts [{mount, root,
+rootInstructions, topics, problems}]; its topics have name, description, bytes,
+cap and sources [{path, heading?}]. list topics have name and description, plus
+mount and root for mounted topics; list adds notices [{mount, message}].
+bytes is null when unreadable; a mount that cannot load has null rootInstructions
+(and null root when its root cannot be resolved).
+Problems have kind and message, plus topic, file, line (link problems only) or
+mount where they apply. Kinds: budget, source, root, unlisted, orphan, link, mount.
+ok is false when any problem exists. Inside a mount, file is relative to that
+mount's root, and the mount's root is relative to the outer root.
+New fields keep schemaVersion 1; a breaking change bumps it, so refuse unknown
+values. A config that cannot load or validate prints no JSON (stderr, status 1).
 
 Topics live in wiki/ai-context.json. A source is a whole file or one exact
 heading (the section runs to the next heading of the same or higher level).
