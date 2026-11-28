@@ -140,7 +140,11 @@ Skill 會先測量目前的 context，再整理文件、設定路由並檢查結
 python3 scripts/ai-context.py list
 python3 scripts/ai-context.py debugging
 python3 scripts/ai-context.py check
+python3 scripts/ai-context.py list --json
+python3 scripts/ai-context.py check --json
 ```
+
+`list --json` 和 `check --json` 輸出 `schemaVersion`、`version`、`ok`、topics 和 problems。check 還包含 root instructions 和 mounts，list 包含 notices。問題 kind 包括 `budget`、`source`、`root`、`unlisted`、`orphan`、`link` 和 `mount`。使用方應拒絕未知的 schema version。設定無法載入或驗證時不會輸出 JSON。
 
 `list` 顯示可用的 topic。指定 topic 名稱後，腳本只會輸出對應內容，並標示來源路徑。`check` 會驗證路由和設定的上限。
 

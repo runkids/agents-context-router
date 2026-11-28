@@ -140,7 +140,11 @@ After the refactor, the generated script works in that repository:
 python3 scripts/ai-context.py list
 python3 scripts/ai-context.py debugging
 python3 scripts/ai-context.py check
+python3 scripts/ai-context.py list --json
+python3 scripts/ai-context.py check --json
 ```
+
+`list --json` and `check --json` emit `schemaVersion`, `version`, `ok`, topics and problems; check includes root instructions and mounts, while list includes notices. Problem kinds are `budget`, `source`, `root`, `unlisted`, `orphan`, `link` and `mount`. Consumers should refuse unknown schema versions. A config that cannot load or validate produces no JSON.
 
 `list` shows available topics. A topic command prints only its mapped sections, marked with their source paths. `check` validates the router and its configured limits. Relative Markdown links are always checked in complete routed sources, wiki pages (including history and routing exceptions), and pages matched by optional `indexed` patterns. Destinations resolve from the containing page and must be files inside the repository; heading fragments are not validated.
 

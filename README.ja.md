@@ -140,7 +140,11 @@ npx skills add runkids/agents-context-router
 python3 scripts/ai-context.py list
 python3 scripts/ai-context.py debugging
 python3 scripts/ai-context.py check
+python3 scripts/ai-context.py list --json
+python3 scripts/ai-context.py check --json
 ```
+
+`list --json` と `check --json` は `schemaVersion`、`version`、`ok`、topics、problems を出力します。check は root instructions と mounts、list は notices も含みます。問題の kind は `budget`、`source`、`root`、`unlisted`、`orphan`、`link`、`mount` です。未知の schema version は拒否してください。設定を読み込みまたは検証できない場合、JSON は出力されません。
 
 `list` は利用できるトピックを表示します。トピック名を指定すると、対応するセクションだけを元ファイルのパス付きで表示します。`check` はルーターと設定された上限を検証します。
 

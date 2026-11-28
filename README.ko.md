@@ -140,7 +140,11 @@ npx skills add runkids/agents-context-router
 python3 scripts/ai-context.py list
 python3 scripts/ai-context.py debugging
 python3 scripts/ai-context.py check
+python3 scripts/ai-context.py list --json
+python3 scripts/ai-context.py check --json
 ```
+
+`list --json`과 `check --json`은 `schemaVersion`, `version`, `ok`, topics, problems를 출력합니다. check에는 root instructions와 mounts가, list에는 notices가 포함됩니다. 문제 kind는 `budget`, `source`, `root`, `unlisted`, `orphan`, `link`, `mount`입니다. 알 수 없는 schema version은 거부하세요. 설정을 불러오거나 검증할 수 없으면 JSON을 출력하지 않습니다.
 
 `list`는 사용 가능한 topic을 보여 줍니다. topic 이름을 지정하면 해당 부분만 원본 경로와 함께 출력합니다. `check`는 router와 설정된 한도를 검증합니다.
 

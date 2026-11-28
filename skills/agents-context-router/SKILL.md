@@ -97,6 +97,8 @@ Some text changes buckets. A lesson belongs in its task topic unless an agent wo
    python3 scripts/ai-context.py list
    python3 scripts/ai-context.py build-deploy kb/guide
    python3 scripts/ai-context.py check
+   python3 scripts/ai-context.py list --json
+   python3 scripts/ai-context.py check --json
    ```
 
    Mount names reserve `name/` against local topic collisions and allow no slash, backslash, whitespace, controls, `.` or `..`. Roots must be strict physical descendants; config/content/checked relative links stay inside their owner after symlinks. Relative roots use the outer root; relative config/docs use the inner root. Contained absolute paths work, without tilde/variable expansion. Inner mounts must be absent or empty. The router reads existing data and neither fetches a module nor executes it.
